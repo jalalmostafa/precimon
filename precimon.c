@@ -1,5 +1,5 @@
 /*
- * njmon.c -- collects Linux performance data and generates JSON format data.
+ * precimon.c -- collects Linux performance data and generates JSON format data.
  * Developer: Nigel Griffiths.
  * (C) Copyright 2018 Nigel Griffiths
 
@@ -17,15 +17,15 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* Compile example: cc -O4 -g -o njmon njmon_linux.c */
+/* Compile example: cc -O4 -g -o precimon precimon_linux.c */
 
-/* njmon_collector version needs to match the version in the njmon_collector.c */
+/* precimon_collector version needs to match the version in the precimon_collector.c */
 #define COLLECTOR_VERSION "12"
 
-/* njmon version */
+/* precimon version */
 #define VERSION "30@16/07/2019" /* version @ day / month / year */
 char version[] = VERSION;
-static char* SccsId = "njmon for Linux " VERSION;
+static char* SccsId = "precimon for Linux " VERSION;
 char* command;
 
 #include <ctype.h>
@@ -71,13 +71,13 @@ int mode = MULTI_LEVEL;
 int oldmode = 0;
 
 /* collect stats on the metrix */
-int njmon_stats = 0;
-int njmon_sections = 0;
-int njmon_subsections = 0;
-int njmon_string = 0;
-int njmon_long = 0;
-int njmon_double = 0;
-int njmon_hex = 0;
+int precimon_stats = 0;
+int precimon_sections = 0;
+int precimon_subsections = 0;
+int precimon_string = 0;
+int precimon_long = 0;
+int precimon_double = 0;
+int precimon_hex = 0;
 
 /* Output JSON test buffering to ensure ist a single write and allow EOL comma removal */
 char* output;
@@ -195,7 +195,7 @@ void create_socket(char* ip_address, long port, char* hostname, char* utc, char*
     FUNCTION_START;
     DEBUG printf("socket: trying to connect to %s:%ld\n", ip_address, port);
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-        pexit("njmon:socket() call failed");
+        pexit("precimon:socket() call failed");
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = inet_addr(ip_address);
@@ -203,15 +203,15 @@ void create_socket(char* ip_address, long port, char* hostname, char* utc, char*
 
     /* Connect tot he socket offered by the web server */
     if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
-        pexit("njmon: connect() call failed");
+        pexit("precimon: connect() call failed");
 
     /* Now the sockfd can be used to communicate to the server the GET request */
-    sprintf(buffer, "preamble-here njmon %s %s %s %s postamble-here",
+    sprintf(buffer, "preamble-here precimon %s %s %s %s postamble-here",
         hostname, utc, secretstr, COLLECTOR_VERSION);
     DEBUG printf("hello string=\"%s\"\n", buffer);
     mixup(buffer);
     if (write(sockfd, buffer, strlen(buffer)) < 0)
-        pexit("njmon: write() to socket failed");
+        pexit("precimon: write() to socket failed");
 }
 #endif /* NOREMOTE */
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -307,7 +307,7 @@ void indent()
 void psection(char* section)
 {
     buffer_check();
-    njmon_sections++;
+    precimon_sections++;
     saved_section = section;
     if (mode == MULTI_LEVEL) {
         indent();
@@ -319,7 +319,7 @@ void psection(char* section)
 void psub(char* resource)
 {
     buffer_check();
-    njmon_subsections++;
+    precimon_subsections++;
     saved_resource = resource;
     if (mode == MULTI_LEVEL) {
         indent();
@@ -354,7 +354,7 @@ void psectionend()
 void phex(char* name, long long value)
 {
     indent();
-    njmon_hex++;
+    precimon_hex++;
     if (mode == ONE_LEVEL) {
         output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": \"0x%08llx\",\n",
             saved_section,
@@ -370,7 +370,7 @@ void phex(char* name, long long value)
 void plong(char* name, long long value)
 {
     indent();
-    njmon_long++;
+    precimon_long++;
     if (mode == ONE_LEVEL) {
         output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": %lld,\n",
             saved_section,
@@ -386,7 +386,7 @@ void plong(char* name, long long value)
 void pdouble(char* name, double value)
 {
     indent();
-    njmon_double++;
+    precimon_double++;
     if (mode == ONE_LEVEL) {
         output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": %.3f,\n",
             saved_section,
@@ -401,20 +401,20 @@ void pdouble(char* name, double value)
 
 void pstats()
 {
-    psection("njmon_stats");
-    plong("section", njmon_sections);
-    plong("subsections", njmon_subsections);
-    plong("string", njmon_string);
-    plong("long", njmon_long);
-    plong("double", njmon_double);
-    plong("hex", njmon_hex);
-    psectionend("njmon_stats");
+    psection("precimon_stats");
+    plong("section", precimon_sections);
+    plong("subsections", precimon_subsections);
+    plong("string", precimon_string);
+    plong("long", precimon_long);
+    plong("double", precimon_double);
+    plong("hex", precimon_hex);
+    psectionend("precimon_stats");
 }
 
 void pstring(char* name, char* value)
 {
     buffer_check();
-    njmon_string++;
+    precimon_string++;
     indent();
     if (mode == ONE_LEVEL) {
         output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": \"%s\",\n",
@@ -435,7 +435,7 @@ void push()
     DEBUG printf("XXX size=%ld\n", output_char);
     if (write(sockfd, output, output_char) < 0) {
         /* if stdout failed there is not must we can do so stop */
-        perror("njmon write to stdout failed, stopping now.");
+        perror("precimon write to stdout failed, stopping now.");
         exit(99);
     }
 
@@ -2019,8 +2019,8 @@ void identity(char* command, char* version)
         file_read_one_stat("/sys/devices/virtual/dmi/id/sys_vendor", "vendor");
     }
 
-    pstring("njmon_command", command);
-    pstring("njmon_version", version);
+    pstring("precimon_command", command);
+    pstring("precimon_version", version);
     if (pw = getpwuid(uid)) {
         pstring("username", pw->pw_name);
         plong("userid", uid);
@@ -2031,12 +2031,12 @@ void identity(char* command, char* version)
 }
 
 /* check_pid_file() and make_pid_file()
- *    If you start njmon and it finds there is a copy running already then it will quitely stop.
- *       You can hourly start njmon via crontab and not end up with dozens of copies runnings.
- *          It also means if the server reboots then njmon start in the next hour.
- *              Side-effect: it creates a file called /tmp/njmon.pid
+ *    If you start precimon and it finds there is a copy running already then it will quitely stop.
+ *       You can hourly start precimon via crontab and not end up with dozens of copies runnings.
+ *          It also means if the server reboots then precimon start in the next hour.
+ *              Side-effect: it creates a file called /tmp/precimon.pid
  *              */
-char pid_filename[] = "/tmp/njmon.pid";
+char pid_filename[] = "/tmp/precimon.pid";
 
 void make_pid_file()
 {
@@ -2081,7 +2081,7 @@ void check_pid_file()
             ret = kill(pid, 0);
             printf("kill %d, 0) = returned =%d\n", pid, ret);
             if (ret == 0) {
-                printf("we have a njmon running - exit\n");
+                printf("we have a precimon running - exit\n");
                 exit(13);
             }
         }
@@ -2616,7 +2616,7 @@ void hint(char* program, char* version)
     printf("- JSON style:      -M  (default) or older style -S or -O\n");
     printf("- File output:     -m directory -f\n");
 #ifndef NOREMOTE
-    printf("- njmon collector output: -i host -p port -X secret\n");
+    printf("- precimon collector output: -i host -p port -X secret\n");
 #endif /* NOREMOTE */
     /* not implemented yet printf("additional options: -P\n"); */
     printf("- Other options: -?\n");
@@ -2630,7 +2630,7 @@ void hint(char* program, char* version)
     printf("\t-f         : Output to file (not stdout) to two files below\n");
     printf("\t           : Data:  hostname_<year><month><day>_<hour><minutes>.json\n");
     printf("\t           : Error: hostname_<year><month><day>_<hour><minutes>.err\n");
-    printf("\t-k         : Read /tmp/njmon.pid for a running njmon PID & if found running then this copy exits\n");
+    printf("\t-k         : Read /tmp/precimon.pid for a running precimon PID & if found running then this copy exits\n");
     printf("\t-P         : Add process stats (take CPU cycles and large stats volume)\n");
     printf("\t-I percent : Set ignore proceiss percent threshold (default 0.01%%)\n");
     printf("\t-? or -h   : This output and stop\n");
@@ -2638,25 +2638,25 @@ void hint(char* program, char* version)
 
 #ifndef NOREMOTE
     printf("Push data to collector: add -h hostname -p port\n");
-    printf("\t-i ip      : IP address or hostname of the njmon central collector\n");
+    printf("\t-i ip      : IP address or hostname of the precimon central collector\n");
     printf("\t-p port    : port number on collector host\n");
-    printf("\t-X secret  : Set the remote collector secret or use shell NJMON_SECRET\n");
+    printf("\t-X secret  : Set the remote collector secret or use shell precimon_SECRET\n");
 #endif /* NOREMOTE */
 
     printf("\n");
     printf("Examples:\n");
     printf("    1 Every 5 mins all day\n");
-    printf("\t/home/nag/njmon -s 300 -c 288 -f -m /home/perf\n");
+    printf("\t/home/nag/precimon -s 300 -c 288 -f -m /home/perf\n");
     printf("    2 Piping to data handler using half a day\n");
-    printf("\t/home/nag/njmon -s 30 -c 1440 | myprog\n");
+    printf("\t/home/nag/precimon -s 30 -c 1440 | myprog\n");
     printf("    3 Use the defaults (-s 60 forever) and save to a file \n");
-    printf("\t./njmon > my_server_today.json\n");
+    printf("\t./precimon > my_server_today.json\n");
     printf("    4 Crontab entry\n");
-    printf("\t0 4 * * * /home/nag/njmon -s 300 -c 288 -f -m /home/perf\n");
-    printf("    5 Crontab - hourly check/restart remote njmon, pipe stats back & insert into local DB\n");
-    printf("\t* 0 * * * /usr/bin/ssh nigel@server /usr/lbin/njmon -s 300 -c 288 | /lbin/injector\n");
-    printf("    6 Crontab - for pumping data to the njmon central collector\n");
-    printf("\t* 0 * * * /usr/local/bin/njmon -s 300 -c 288 -i admin.acme.com -p 8181 -X SECRET42 \n");
+    printf("\t0 4 * * * /home/nag/precimon -s 300 -c 288 -f -m /home/perf\n");
+    printf("    5 Crontab - hourly check/restart remote precimon, pipe stats back & insert into local DB\n");
+    printf("\t* 0 * * * /usr/bin/ssh nigel@server /usr/lbin/precimon -s 300 -c 288 | /lbin/injector\n");
+    printf("    6 Crontab - for pumping data to the precimon central collector\n");
+    printf("\t* 0 * * * /usr/local/bin/precimon -s 300 -c 288 -i admin.acme.com -p 8181 -X SECRET42 \n");
     printf("\n");
 }
 
@@ -2700,13 +2700,13 @@ int main(int argc, char** argv)
     int proc_mode = 0;
 
     FUNCTION_START;
-    s = getenv("NJMON_SECRET");
+    s = getenv("precimon_SECRET");
     if (s != 0)
         debug = atoi(s);
-    s = getenv("NJMON_STATS");
+    s = getenv("precimon_STATS");
     if (s != 0)
-        njmon_stats = atoi(s);
-    s = getenv("NJMON_SECRET");
+        precimon_stats = atoi(s);
+    s = getenv("precimon_SECRET");
     if (s != 0)
         strncpy(secret, s, 128);
 
@@ -2975,12 +2975,12 @@ int main(int argc, char** argv)
 		if(loop == 20) accumalated_delay += 2.5;
 		if(loop == 30) accumalated_delay += 3.5;
 	*/
-        psection("njmontime");
-        plong("njmon_seconds", seconds);
-        pdouble("njmon_sleep_time", sleep_time);
-        pdouble("njmon_execute_time", execute_time);
-        pdouble("njmon_accumalated", accumalated_delay);
-        plong("njmon_sleep_seconds", sleep_seconds);
+        psection("precimontime");
+        plong("precimon_seconds", seconds);
+        pdouble("precimon_sleep_time", sleep_time);
+        pdouble("precimon_execute_time", execute_time);
+        pdouble("precimon_accumalated", accumalated_delay);
+        plong("precimon_sleep_seconds", sleep_seconds);
         psectionend();
 #endif /* timers */
 
@@ -3033,14 +3033,14 @@ int main(int argc, char** argv)
     if (mode == ONE_LEVEL) {
         remove_ending_comma_if_any();
         praw("]\n");
-        if (njmon_stats)
+        if (precimon_stats)
             pstats();
     }
     if (mode == MULTI_LEVEL) {
         remove_ending_comma_if_any();
         if (samples)
             praw(" ]\n");
-        if (njmon_stats)
+        if (precimon_stats)
             pstats();
         pfinish();
     }

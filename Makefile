@@ -1,11 +1,11 @@
-# Makefile for njmon for Linux
+# Makefile for precimon for Linux
 CFLAGS=-g -O4
 LDFLAGS=-g
 
-FILE=njmon_linux_v30.c
-OUT=njmon
+FILE=precimon.c
+OUT=precimon
 
-$(OUT): 
+$(OUT):
 	cc $(CFLAGS) -o $(OUT) $(FILE) $(LDFLAGS)
 
 clean:
