@@ -1,6 +1,9 @@
 /*
- * precimon.c -- collects Linux performance data and generates JSON format data.
- * Developer: Nigel Griffiths.
+ * precimon.c -- collects Linux performance data for real-time systems
+ * Developer: Jalal Mostafa.
+ * (C) Copyright 2019 Jalal Mostafa
+ *
+ * This program incorporates a modified version of njmon (http://nmon.sourceforge.net/pmwiki.php?n=Site.Njmon)
  * (C) Copyright 2018 Nigel Griffiths
 
     This program is free software: you can redistribute it and/or modify
@@ -88,17 +91,6 @@ long level = 0;
 
 char hostname[256] = { 0 };
 char shorthostname[256] = { 0 };
-
-void interrupt(int signum)
-{
-    switch (signum) {
-    case SIGUSR1:
-    case SIGUSR2:
-        fflush(NULL);
-        exit(0);
-        break;
-    }
-}
 
 int sockfd = 1; /*default is stdout, only changed if we are using a remote socket */
 
@@ -262,14 +254,14 @@ void praw(char* string)
 void pstart()
 {
     DEBUG praw("START");
-    praw("{\n");
+    praw("[\n");
 }
 
 void pfinish()
 {
     DEBUG praw("FINISH");
     remove_ending_comma_if_any();
-    praw("}\n");
+    praw("]\n");
 }
 
 void psample()
@@ -426,6 +418,22 @@ void pstring(char* name, char* value)
         output_char += sprintf(&output[output_char], "\"%s\": \"%s\",\n", name, value);
     }
     DEBUG printf("pstring(%s,%s) count=%ld\n", name, value, output_char);
+}
+
+void interrupt(int signum)
+{
+    switch (signum) {
+    case SIGUSR1:
+    case SIGUSR2:
+        fflush(NULL);
+        exit(0);
+        break;
+    case SIGTERM:
+    case SIGKILL:
+        pfinish();
+        fflush(NULL);
+        break;
+    }
 }
 
 void push()
@@ -896,7 +904,7 @@ name: numer kB
 void read_data_number(char* statname)
 {
     FILE* fp = 0;
-    char line[1024];
+    char line[1063];
     char filename[1024];
     char label[512];
     char number[512];
@@ -1445,7 +1453,7 @@ void etc_os_release()
     static FILE* fp = 0;
     static int firsttime = 1;
     static char os_name[256] = "unknown";
-    static char os_version[256] = "unknown";
+    static char os_version[1283] = "unknown";
     static char os_version_id[256] = "unknown";
     static char os_pretty[256] = "unknown";
     char buf[1024 + 1];
@@ -2640,7 +2648,7 @@ void hint(char* program, char* version)
     printf("Push data to collector: add -h hostname -p port\n");
     printf("\t-i ip      : IP address or hostname of the precimon central collector\n");
     printf("\t-p port    : port number on collector host\n");
-    printf("\t-X secret  : Set the remote collector secret or use shell precimon_SECRET\n");
+    printf("\t-X secret  : Set the remote collector secret or use shell PRECIMON_SECRET\n");
 #endif /* NOREMOTE */
 
     printf("\n");
@@ -2700,18 +2708,20 @@ int main(int argc, char** argv)
     int proc_mode = 0;
 
     FUNCTION_START;
-    s = getenv("precimon_SECRET");
+    s = getenv("PRECIMON_SECRET");
     if (s != 0)
         debug = atoi(s);
-    s = getenv("precimon_STATS");
+    s = getenv("PRECIMON_STATS");
     if (s != 0)
         precimon_stats = atoi(s);
-    s = getenv("precimon_SECRET");
+    s = getenv("PRECIMON_SECRET");
     if (s != 0)
         strncpy(secret, s, 128);
 
     signal(SIGUSR1, interrupt);
     signal(SIGUSR2, interrupt);
+    signal(SIGKILL, interrupt);
+    signal(SIGTERM, interrupt);
 
     uid = getuid();
 
