@@ -9,5 +9,5 @@ $(OUT):
 	cc $(CFLAGS) -o $(OUT) $(FILE) $(LDFLAGS)
 
 clean:
-	rm $(OUT)
+	rm $(OUT) *.json *.err
 
