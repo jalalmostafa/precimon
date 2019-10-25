@@ -53,5 +53,10 @@ dkms.conf
 
 # Custom
 precimon
+precimon_collector
+collector
 *.json
 *.err
+*.conf
+*.log
+.vscode

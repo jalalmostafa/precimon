@@ -89,8 +89,10 @@ long output_char = 0;
 char* nullstring = "";
 long level = 0;
 
+#ifndef NOREMOTE
 char hostname[256] = { 0 };
 char shorthostname[256] = { 0 };
+#endif
 
 int sockfd = 1; /*default is stdout, only changed if we are using a remote socket */
 
@@ -182,26 +184,31 @@ void create_socket(char* ip_address, long port, char* hostname, char* utc, char*
 {
     int i;
     char buffer[8196];
-    static struct sockaddr_in serv_addr;
+    struct sockaddr_in hostsockaddr;
 
     FUNCTION_START;
     DEBUG printf("socket: trying to connect to %s:%ld\n", ip_address, port);
+
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
         pexit("precimon:socket() call failed");
 
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = inet_addr(ip_address);
-    serv_addr.sin_port = htons(port);
+    memset(&hostsockaddr, 0, sizeof(hostsockaddr));
+    hostsockaddr.sin_family = AF_INET;
+    hostsockaddr.sin_port = htons(port);
 
-    /* Connect tot he socket offered by the web server */
-    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
-        pexit("precimon: connect() call failed");
+    if(inet_pton(AF_INET, ip_address, &hostsockaddr.sin_addr) <= 0){
+        printf("hostname=%s is not valid\n", ip_address);
+        exit(55);
+    }
 
-    /* Now the sockfd can be used to communicate to the server the GET request */
+    if (connect(sockfd, (struct sockaddr*)&hostsockaddr, sizeof(hostsockaddr)) < 0)
+            pexit("precimon: connect() call failed");
+
     sprintf(buffer, "preamble-here precimon %s %s %s %s postamble-here",
         hostname, utc, secretstr, COLLECTOR_VERSION);
     DEBUG printf("hello string=\"%s\"\n", buffer);
     mixup(buffer);
+
     if (write(sockfd, buffer, strlen(buffer)) < 0)
         pexit("precimon: write() to socket failed");
 }
@@ -441,8 +448,8 @@ void push()
     FUNCTION_START;
     buffer_check();
     DEBUG printf("XXX size=%ld\n", output_char);
+
     if (write(sockfd, output, output_char) < 0) {
-        /* if stdout failed there is not must we can do so stop */
         perror("precimon write to stdout failed, stopping now.");
         exit(99);
     }
@@ -464,7 +471,6 @@ struct tm* tim; /* used to work out the local hour/min/second */
 
 void get_time()
 {
-
     timer = time(0);
 }
 
@@ -1255,7 +1261,7 @@ void proc_diskstats(double elapsed, int print)
 
         /* loop**** disks are not real */
         /*if(strncmp(current.dk_name,"loop", 4) )
-	    break;*/
+        break;*/
 
         for (i = 0; i < disks; i++) {
             /*printf("DEBUG disks new %s old %s\n", current.dk_name,previous[i].dk_name);*/
@@ -1263,8 +1269,8 @@ void proc_diskstats(double elapsed, int print)
                 if (print) {
                     psub(current.dk_name);
                     /*		deveive code are not interesting and never change
-		printf("major",      current.dk_major);
-		printf("minor",      current.dk_minor);
+        printf("major",      current.dk_major);
+        printf("minor",      current.dk_minor);
 */
                     pdouble("reads", (current.dk_reads - previous[i].dk_reads) / elapsed);
                     /*printf("DEBUG  reads: %lld %lld %.2f,\n",    current.dk_reads, previous[i].dk_reads,  elapsed); */
@@ -1486,8 +1492,8 @@ void etc_os_release()
         } else {
             if ((fp = fopen("/etc/redhat-release", "r")) != NULL) {
                 /* Example of this file is
-			 * Red Hat Enterprise Linux Server release 7.5 (Maipo)
-			 */
+             * Red Hat Enterprise Linux Server release 7.5 (Maipo)
+             */
                 if (fgets(buf, 1024, fp) != NULL) {
                     buf[strlen(buf) - 1] = 0; /* remove newline */
                     for (i = 0; i < strlen(buf); i++)
@@ -2365,7 +2371,7 @@ int proc_procsinfo(int pid, int index)
     }
     size = fread(buf, 1, 1024 * 4 - 1, fp);
     fclose(fp); /* close it even if the read failed, the file could have been removed
-		between open & read i.e. the device driver does not behave like a file */
+        between open & read i.e. the device driver does not behave like a file */
     if (size == -1) {
         fprintf(stderr, "failed to read file %s", filename);
         return 0;
@@ -2640,7 +2646,7 @@ void hint(char* program, char* version)
     printf("\t           : Error: hostname_<year><month><day>_<hour><minutes>.err\n");
     printf("\t-k         : Read /tmp/precimon.pid for a running precimon PID & if found running then this copy exits\n");
     printf("\t-P         : Add process stats (take CPU cycles and large stats volume)\n");
-    printf("\t-I percent : Set ignore proceiss percent threshold (default 0.01%%)\n");
+    printf("\t-I percent : Set ignore process percent threshold (default 0.01%%)\n");
     printf("\t-? or -h   : This output and stop\n");
     printf("\t-d         : Switch on debugging\n");
 
@@ -2676,9 +2682,11 @@ int main(int argc, char** argv)
     long loop;
     long maxloops = -1;
     long seconds = 60;
+#ifndef NOREMOTE
     long port = -1;
     char host[1024 + 1] = { 0 };
     int hostmode = 0;
+#endif
     int ch;
     double elapsed;
     double previous_time;
@@ -2725,7 +2733,7 @@ int main(int argc, char** argv)
 
     uid = getuid();
 
-    while (-1 != (ch = getopt(argc, argv, "?hfm:SMOs:c:kdi:I:Pp:X:x"))) {
+    while(-1 != (ch = getopt(argc, argv, "?hfm:SMOs:c:kdi:I:Pp:X:x"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -2749,7 +2757,6 @@ int main(int argc, char** argv)
             mode = MULTI_LEVEL;
             oldmode = 1;
             break;
-
         case 's':
             seconds = atoi(optarg);
             if (seconds < 1)
@@ -2793,10 +2800,12 @@ int main(int argc, char** argv)
         printf("%s -i %s set but not the -p port option\n", argv[0], host);
         exit(52);
     }
+
     if (hostmode == 0 && port > 0) {
         printf("%s -p %ld but not the -i ip-address option\n", argv[0], port);
         exit(53);
     }
+
     if (hostmode == 1 && port != 0) { /* We are attempting sending the data remotely */
         if (isalpha(host[0])) {
             struct hostent* he;
@@ -2806,16 +2815,6 @@ int main(int argc, char** argv)
                 printf("hostname=%s to IP address convertion failed, bailing out\n", hostname);
                 exit(98);
             }
-            /*
-	                   printf("name=%s\n",he->h_name);
-	                   printf("type=%d = ",he->h_addrtype);
-	                   switch(he->h_addrtype) {
-	                       case AF_INET: printf("IPv4\n"); break;
-	                       case AF_INET6: printf("(IPv6\n"); break;
-	                       default: printf("unknown\n");
-	                   }
-	                   printf("length=%d\n",he->h_length);
-	               */
 
             /* this could return multiple IP addresses but we assume its the first one */
             if (he->h_addr_list[0] != NULL) {
@@ -2836,6 +2835,7 @@ int main(int argc, char** argv)
             tim->tm_hour,
             tim->tm_min,
             tim->tm_sec);
+
         create_socket(host, port, hostname, datastring, secret);
     }
 #endif /* NOREMOTE */
@@ -2887,10 +2887,6 @@ int main(int argc, char** argv)
     }
     DEBUG printf("child running\n");
     if (!debug) {
-        /*	close(0);
-		close(1);
-		close(2);
-	*/
         setpgrp(); /* become process group leader */
         signal(SIGHUP, SIG_IGN); /* ignore hangups */
     }
@@ -2900,7 +2896,7 @@ int main(int argc, char** argv)
     for (i = 0; i < argc; i++) {
         commlen = commlen + strlen(argv[i]) + 1; /* +1 for spaces */
     }
-    command = malloc(commlen);
+    command = (char*) malloc(commlen);
     command[0] = 0;
     for (i = 0; i < argc; i++) {
         strcat(command, argv[i]);
@@ -2926,7 +2922,7 @@ int main(int argc, char** argv)
         sleep_seconds = seconds;
     else
         sleep_seconds = 60; /* if a long time between snapshot do a quick one
-				       now so we have some stats in the output file */
+                               now so we have some stats in the output file */
     sleep(sleep_seconds);
 
     gettimeofday(&tv, 0);
@@ -2981,10 +2977,10 @@ int main(int argc, char** argv)
         psample();
 #ifdef TIMERS
         /* for testing
-		if(loop == 10) accumalated_delay += 1.5;
-		if(loop == 20) accumalated_delay += 2.5;
-		if(loop == 30) accumalated_delay += 3.5;
-	*/
+        if(loop == 10) accumalated_delay += 1.5;
+        if(loop == 20) accumalated_delay += 2.5;
+        if(loop == 30) accumalated_delay += 3.5;
+    */
         psection("precimontime");
         plong("precimon_seconds", seconds);
         pdouble("precimon_sleep_time", sleep_time);
@@ -3031,10 +3027,6 @@ int main(int argc, char** argv)
         DEBUG praw("Sample");
         psampleend(loop == (maxloops - 1));
         push();
-        /* debbuging - uncomment to crash here!
-		*crashptr = 42;
-		*crashptr = 42;
-		*/
         gettimeofday(&tv, 0);
         execute_end = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
         execute_time = execute_end - execute_start;
