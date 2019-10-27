@@ -68,10 +68,6 @@ char* command;
 
 int debug = 0;
 uid_t uid = (uid_t)123456;
-#define ONE_LEVEL 1
-#define MULTI_LEVEL 9
-int mode = MULTI_LEVEL;
-int oldmode = 0;
 
 /* collect stats on the metrix */
 int precimon_stats = 0;
@@ -88,6 +84,7 @@ long output_size = 0;
 long output_char = 0;
 char* nullstring = "";
 long level = 0;
+int interrupted = 0;
 
 #ifndef NOREMOTE
 char hostname[256] = { 0 };
@@ -251,8 +248,6 @@ void buffer_check()
     }
 }
 
-int samples = 0;
-
 void praw(char* string)
 {
     output_char += sprintf(&output[output_char], "%s", string);
@@ -261,30 +256,30 @@ void praw(char* string)
 void pstart()
 {
     DEBUG praw("START");
-    praw("[\n");
+    praw("{\n");
 }
 
 void pfinish()
 {
     DEBUG praw("FINISH");
     remove_ending_comma_if_any();
-    praw("]\n");
+    praw("}\n");
 }
 
-void psample()
+void psnapshot()
 {
     DEBUG praw("SAMPLE");
-    praw("  {\n"); /* start of sample */
+    praw("{\n"); /* start of sample */
 }
 
-void psampleend(int comma_needed)
+void psnapshotend(int comma_needed)
 {
     DEBUG praw("SAMPLEEND");
     remove_ending_comma_if_any();
     if (comma_needed)
-        praw("  }\n"); /* end of sample */
+        praw("\t}"); /* end of sample */
     else
-        praw("  },\n"); /* end of sample more to come */
+        praw("\t},"); /* end of sample more to come */
 }
 
 char* saved_section;
@@ -296,9 +291,6 @@ void indent()
     int i;
     DEBUG praw("INDENT");
 
-    if (mode == ONE_LEVEL)
-        saved_level = 2;
-
     for (i = 0; i < saved_level; i++)
         praw("\t");
 }
@@ -308,10 +300,17 @@ void psection(char* section)
     buffer_check();
     precimon_sections++;
     saved_section = section;
-    if (mode == MULTI_LEVEL) {
-        indent();
-        output_char += sprintf(&output[output_char], "\"%s\": {\n", section);
-    }
+    indent();
+    output_char += sprintf(&output[output_char], "\"%s\": {\n", section);
+    saved_level++;
+}
+
+void psnapshots()
+{
+    buffer_check();
+    precimon_sections++;
+    indent();
+    output_char += sprintf(&output[output_char], "\"snapshots\": [");
     saved_level++;
 }
 
@@ -320,21 +319,17 @@ void psub(char* resource)
     buffer_check();
     precimon_subsections++;
     saved_resource = resource;
-    if (mode == MULTI_LEVEL) {
-        indent();
-        output_char += sprintf(&output[output_char], "\"%s\": {\n", resource);
-    }
+    indent();
+    output_char += sprintf(&output[output_char], "\"%s\": {\n", resource);
     saved_level++;
 }
 
 void psubend()
 {
     saved_resource = NULL;
-    if (mode == MULTI_LEVEL) {
-        remove_ending_comma_if_any();
-        indent();
-        praw("},\n");
-    }
+    remove_ending_comma_if_any();
+    indent();
+    praw("},\n");
     saved_level--;
 }
 
@@ -343,26 +338,28 @@ void psectionend()
     saved_section = NULL;
     saved_resource = NULL;
     saved_level--;
-    if (mode == MULTI_LEVEL) {
-        remove_ending_comma_if_any();
-        indent();
-        praw("},\n");
+    remove_ending_comma_if_any();
+    indent();
+    praw("},\n");
+}
+
+void psnapshots_end()
+{
+    saved_section = NULL;
+    saved_resource = NULL;
+    saved_level--;
+
+    if(output[output_char - 1] == ',') {
+        output_char--;
     }
+    praw("],\n");
 }
 
 void phex(char* name, long long value)
 {
     indent();
     precimon_hex++;
-    if (mode == ONE_LEVEL) {
-        output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": \"0x%08llx\",\n",
-            saved_section,
-            saved_resource == NULL ? "" : "_",
-            saved_resource == NULL ? "" : saved_resource,
-            name, value);
-    } else {
-        output_char += sprintf(&output[output_char], "\"%s\": \"0x%08llx\",\n", name, value);
-    }
+    output_char += sprintf(&output[output_char], "\"%s\": \"0x%08llx\",\n", name, value);
     DEBUG printf("plong(%s,%lld) count=%ld\n", name, value, output_char);
 }
 
@@ -370,15 +367,7 @@ void plong(char* name, long long value)
 {
     indent();
     precimon_long++;
-    if (mode == ONE_LEVEL) {
-        output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": %lld,\n",
-            saved_section,
-            saved_resource == NULL ? "" : "_",
-            saved_resource == NULL ? "" : saved_resource,
-            name, value);
-    } else {
-        output_char += sprintf(&output[output_char], "\"%s\": %lld,\n", name, value);
-    }
+    output_char += sprintf(&output[output_char], "\"%s\": %lld,\n", name, value);
     DEBUG printf("plong(%s,%lld) count=%ld\n", name, value, output_char);
 }
 
@@ -386,15 +375,7 @@ void pdouble(char* name, double value)
 {
     indent();
     precimon_double++;
-    if (mode == ONE_LEVEL) {
-        output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": %.3f,\n",
-            saved_section,
-            saved_resource == NULL ? "" : "_",
-            saved_resource == NULL ? "" : saved_resource,
-            name, value);
-    } else {
-        output_char += sprintf(&output[output_char], "\"%s\": %.3f,\n", name, value);
-    }
+    output_char += sprintf(&output[output_char], "\"%s\": %.3f,\n", name, value);
     DEBUG printf("pdouble(%s,%.1f) count=%ld\n", name, value, output_char);
 }
 
@@ -415,32 +396,8 @@ void pstring(char* name, char* value)
     buffer_check();
     precimon_string++;
     indent();
-    if (mode == ONE_LEVEL) {
-        output_char += sprintf(&output[output_char], "\"%s%s%s_%s\": \"%s\",\n",
-            saved_section,
-            saved_resource == NULL ? "" : "_",
-            saved_resource == NULL ? "" : saved_resource,
-            name, value);
-    } else {
-        output_char += sprintf(&output[output_char], "\"%s\": \"%s\",\n", name, value);
-    }
+    output_char += sprintf(&output[output_char], "\"%s\": \"%s\",\n", name, value);
     DEBUG printf("pstring(%s,%s) count=%ld\n", name, value, output_char);
-}
-
-void interrupt(int signum)
-{
-    switch (signum) {
-    case SIGUSR1:
-    case SIGUSR2:
-        fflush(NULL);
-        exit(0);
-        break;
-    case SIGTERM:
-    case SIGKILL:
-        pfinish();
-        fflush(NULL);
-        break;
-    }
 }
 
 void push()
@@ -609,7 +566,7 @@ int gpfs_grab()
         gpfs_na = 1;
     }
 
-    /* second the 1 or more filesystem  I/O stats */
+    /* second the 1 or more filesystem I/O stats */
     index = 0;
     count = write(outfd[1], "fs_io_s\n", strlen("fs_io_s\n"));
     if (count != strlen("fs_io_s\n")) {
@@ -939,7 +896,6 @@ void read_data_number(char* statname)
                 line[i] = 0;
         }
         sscanf(line, "%s %s", label, number);
-        /*printf("read_data_numer(%s) |%s| |%s|=%lld\n", statname,label,numstr,atoll(numstr));*/
         plong(label, atoll(number));
     }
     psectionend();
@@ -1153,9 +1109,7 @@ void proc_diskstats(double elapsed, int print)
         long long dk_bsize;
     };
     static struct diskinfo current;
-    ;
     static struct diskinfo* previous;
-    ;
     static FILE* fp = 0;
     char buf[1024];
     int dk_stats;
@@ -1202,7 +1156,6 @@ void proc_diskstats(double elapsed, int print)
                     if (tmpstr[j] == ' ')
                         tmpstr[j] = 0;
                 strcpy(previous[i].dk_name, tmpstr);
-                /*printf("DEBUG saved %ld %s disk name\n",i,previous[i].dk_name);*/
             }
             pclose(pop);
         } else
@@ -1239,13 +1192,11 @@ void proc_diskstats(double elapsed, int print)
             &current.dk_backlog);
 
         if (dk_stats == 7) { /* shuffle the data around due to missing columns for partitions */
-
             current.dk_wkb = current.dk_rmsec;
             current.dk_writes = current.dk_rkb;
             current.dk_rkb = current.dk_rmerge;
             current.dk_rmsec = 0;
             current.dk_rmerge = 0;
-
         } else if (dk_stats != 14)
             fprintf(stderr, "disk sscanf wanted 14 but returned=%d line=%s\n", dk_stats, buf);
 
@@ -1259,19 +1210,11 @@ void proc_diskstats(double elapsed, int print)
 
         current.dk_time /= 10.0; /* in milli-seconds to make it upto 100%, 1000/100 = 10 */
 
-        /* loop**** disks are not real */
-        /*if(strncmp(current.dk_name,"loop", 4) )
-        break;*/
-
         for (i = 0; i < disks; i++) {
             /*printf("DEBUG disks new %s old %s\n", current.dk_name,previous[i].dk_name);*/
             if (!strcmp(current.dk_name, previous[i].dk_name)) {
                 if (print) {
                     psub(current.dk_name);
-                    /*		deveive code are not interesting and never change
-        printf("major",      current.dk_major);
-        printf("minor",      current.dk_minor);
-*/
                     pdouble("reads", (current.dk_reads - previous[i].dk_reads) / elapsed);
                     /*printf("DEBUG  reads: %lld %lld %.2f,\n",    current.dk_reads, previous[i].dk_reads,  elapsed); */
                     pdouble("rmerge", (current.dk_rmerge - previous[i].dk_rmerge) / elapsed);
@@ -1397,7 +1340,6 @@ void proc_net_dev(double elapsed, int print)
             &current.if_ocarrier);
         if (ret == 16) {
             for (i = 0; i < interfaces; i++) {
-                /*printf("DEBUG: i=%ld current.if_name=%s, previous=%s interfaces=%ld\n",i, current.if_name,previous[i].if_name, interfaces);*/
                 if (!strcmp(current.if_name, previous[i].if_name)) {
                     if (print) {
                         psub(current.if_name);
@@ -1478,12 +1420,15 @@ void etc_os_release()
                 if (!strncmp(buf, "NAME=", strlen("NAME="))) {
                     strncpy(os_name, &buf[strlen("NAME=") + 1], 255);
                 }
+
                 if (!strncmp(buf, "VERSION=", strlen("VERSION="))) {
                     strncpy(os_version, &buf[strlen("VERSION=") + 1], 255);
                 }
+
                 if (!strncmp(buf, "PRETTY_NAME=", strlen("PRETTY_NAME="))) {
                     strncpy(os_pretty, &buf[strlen("PRETTY_NAME=") + 1], 255);
                 }
+
                 if (!strncmp(buf, "VERSION_ID=", strlen("VERSION_ID="))) {
                     strncpy(os_version_id, &buf[strlen("VERSION_ID=") + 1], 255);
                 }
@@ -1504,12 +1449,15 @@ void etc_os_release()
                     if (!strncmp(buf, "Fedora", strlen("Fedora"))) { /* guessing the name */
                         strcpy(os_name, "Fedora");
                     }
+
                     if (!strncmp(buf, "Centos", strlen("Centos"))) { /* guessing the name */
                         strcpy(os_name, "Centos");
                     }
+
                     if (!strncmp(buf, "Red Hat", strlen("Red Hat"))) { /* guessing the name */
                         strcpy(os_name, "Red Hat");
                     }
+
                     if (!strncmp(buf, "Red Hat Enterprise Linux Server", strlen("Red Hat Enterprise Linux Server"))) {
                         strcpy(os_name, "Red Hat Enterprise Linux Server");
 
@@ -1572,7 +1520,6 @@ void lscpu()
     psection("lscpu");
     while (fgets(buf, 1024, pop) != NULL) {
         buf[strlen(buf) - 1] = 0; /* remove newline */
-        /*printf("DEBUG: lscpu line is |%s|\n",buf); */
         if (!strncmp("Architecture:", buf, strlen("Architecture:"))) {
             len = strlen(buf);
             for (data_col = 14; data_col < len; data_col++) {
@@ -1581,55 +1528,72 @@ void lscpu()
             }
             pstring("architecture", &buf[data_col]);
         }
+
         if (!strncmp("Byte Order:", buf, strlen("Byte Order:"))) {
             pstring("byte_order", &buf[data_col]);
         }
+
         if (!strncmp("CPU(s):", buf, strlen("CPU(s):"))) {
             pstring("cpus", &buf[data_col]);
         }
+
         if (!strncmp("On-line CPU(s) list:", buf, strlen("On-line CPU(s) list:"))) {
             pstring("online_cpu_list", &buf[data_col]);
         }
+
         if (!strncmp("Off-line CPU(s) list:", buf, strlen("Off-line CPU(s) list:"))) {
             pstring("online_cpu_list", &buf[data_col]);
         }
+
         if (!strncmp("Model:", buf, strlen("Model:"))) {
             pstring("model", &buf[data_col]);
         }
+
         if (!strncmp("Model name:", buf, strlen("Model name:"))) {
             pstring("model_name", &buf[data_col]);
         }
+
         if (!strncmp("Thread(s) per core:", buf, strlen("Thread(s) per core:"))) {
             pstring("threads_per_core", &buf[data_col]);
         }
+
         if (!strncmp("Core(s) per socket:", buf, strlen("Core(s) per socket:"))) {
             pstring("cores_per_socket", &buf[data_col]);
         }
+
         if (!strncmp("Socket(s):", buf, strlen("Socket(s):"))) {
             pstring("sockets", &buf[data_col]);
         }
+
         if (!strncmp("NUMA node(s):", buf, strlen("NUMA node(s):"))) {
             pstring("numa_nodes", &buf[data_col]);
         }
+
         if (!strncmp("CPU MHz:", buf, strlen("CPU MHz:"))) {
             pstring("cpu_mhz", &buf[data_col]);
         }
+
         if (!strncmp("CPU max MHz:", buf, strlen("CPU max MHz:"))) {
             pstring("cpu_max_mhz", &buf[data_col]);
         }
+
         if (!strncmp("CPU min MHz:", buf, strlen("CPU min MHz:"))) {
             pstring("cpu_min_mhz", &buf[data_col]);
         }
+
         /* Intel only */
         if (!strncmp("BogoMIPS:", buf, strlen("BogoMIPS:"))) {
             pstring("bogomips", &buf[data_col]);
         }
+
         if (!strncmp("Vendor ID:", buf, strlen("Vendor ID:"))) {
             pstring("vendor_id", &buf[data_col]);
         }
+
         if (!strncmp("CPU family:", buf, strlen("CPU family:"))) {
             pstring("cpu_family", &buf[data_col]);
         }
+
         if (!strncmp("Stepping:", buf, strlen("Stepping:"))) {
             pstring("stepping", &buf[data_col]);
         }
@@ -1645,9 +1609,7 @@ void proc_uptime()
     int count;
     long long value;
     long long days;
-    ;
     long long hours;
-    ;
 
     FUNCTION_START;
     if (fp == 0) {
@@ -1692,8 +1654,6 @@ void filesystems()
             if (strncmp(fs->mnt_type, "autofs", 6) == 0) /* skip autofs file systems as they don't have I/O stats */
                 continue;
 
-            /*printf("%s, mounted on %s:\n", fs->mnt_dir, fs->mnt_fsname); */
-
             psub(fs->mnt_fsname);
             pstring("fs_dir", fs->mnt_dir);
             pstring("fs_type", fs->mnt_type);
@@ -1721,7 +1681,6 @@ void filesystems()
 long power_timebase = 0;
 long power_nominal_mhz = 0;
 int ispower = 0;
-;
 
 void proc_cpuinfo()
 {
@@ -1754,42 +1713,52 @@ void proc_cpuinfo()
             psub(string);
             processor++;
         }
+
         if (!strncmp("clock", buf, strlen("clock"))) { /* POWER ONLY */
             sscanf(&buf[9], "%lf", &value);
             pdouble("mhz_clock", value);
             power_nominal_mhz = value; /* save for sys_device_system_cpu() */
             ispower = 1;
         }
+
         if (!strncmp("vendor_id", buf, strlen("vendor_id"))) {
             pstring("vendor_id", &buf[12]);
         }
+
         if (!strncmp("cpu MHz", buf, strlen("cpu MHz"))) {
             sscanf(&buf[11], "%lf", &value);
             pdouble("cpu_mhz", value);
         }
+
         if (!strncmp("cache size", buf, strlen("cache size"))) {
             sscanf(&buf[13], "%lf", &value);
             pdouble("cache_size", value);
         }
+
         if (!strncmp("physical id", buf, strlen("physical id"))) {
             sscanf(&buf[14], "%d", &int_val);
             plong("physical_id", int_val);
         }
+
         if (!strncmp("siblings", buf, strlen("siblings"))) {
             sscanf(&buf[11], "%d", &int_val);
             plong("siblings", int_val);
         }
+
         if (!strncmp("core id", buf, strlen("core id"))) {
             sscanf(&buf[10], "%d", &int_val);
             plong("core_id", int_val);
         }
+
         if (!strncmp("cpu cores", buf, strlen("cpu cores"))) {
             sscanf(&buf[12], "%d", &int_val);
             plong("cpu_cores", int_val);
         }
+
         if (!strncmp("model name", buf, strlen("model name"))) {
             pstring("model_name", &buf[13]);
         }
+
         if (!strncmp("timebase", buf, strlen("timebase"))) { /* POWER only */
             ispower = 1;
             break;
@@ -1805,17 +1774,21 @@ void proc_cpuinfo()
             power_timebase = atol(&buf[11]);
             plong("power_timebase", power_timebase);
         }
+
         while (fgets(buf, 1024, fp) != NULL) {
             buf[strlen(buf) - 1] = 0; /* remove newline */
             if (!strncmp("platform", buf, strlen("platform"))) { /* POWER only */
                 pstring("platform", &buf[11]);
             }
+
             if (!strncmp("model", buf, strlen("model"))) {
                 pstring("model", &buf[9]);
             }
+
             if (!strncmp("machine", buf, strlen("machine"))) {
                 pstring("machine", &buf[11]);
             }
+
             if (!strncmp("firmware", buf, strlen("firmware"))) {
                 pstring("firmware", &buf[11]);
             }
@@ -2026,6 +1999,7 @@ void identity(char* command, char* version)
         file_read_one_stat("/proc/device-tree/system-id", "system-id");
         file_read_one_stat("/proc/device-tree/vendor", "vendor");
     }
+
     /*x86_64 and AMD64 */
     if (access("/sys/devices/virtual/dmi/id/", R_OK) == 0) {
         file_read_one_stat("/sys/devices/virtual/dmi/id/product_serial", "serial-number");
@@ -2093,7 +2067,7 @@ void check_pid_file()
         if (sscanf(buffer, "%d", &pid) == 1) {
             printf("read a pid from the file OK = %d\n", pid);
             ret = kill(pid, 0);
-            printf("kill %d, 0) = returned =%d\n", pid, ret);
+            printf("kill(%d, 0) = returned =%d\n", pid, ret);
             if (ret == 0) {
                 printf("we have a precimon running - exit\n");
                 exit(13);
@@ -2627,7 +2601,6 @@ void hint(char* program, char* version)
     printf("%s: help information. Version:%s\n\n", program, version);
     printf("- Performance stats collector outputing JSON format. Default is stdout\n");
     printf("- Core syntax:     %s -s seconds -c count\n", program);
-    printf("- JSON style:      -M  (default) or older style -S or -O\n");
     printf("- File output:     -m directory -f\n");
 #ifndef NOREMOTE
     printf("- precimon collector output: -i host -p port -X secret\n");
@@ -2637,9 +2610,6 @@ void hint(char* program, char* version)
     printf("\n");
     printf("\t-s seconds : seconds between snapshots of data (default 60 seconds)\n");
     printf("\t-c count   : number of snapshots (default forever)\n\n");
-    printf("\t-S         : Single level output format - section names form part of the value names\n");
-    printf("\t-M         : Multiple level output format - section & subsection names (default)\n");
-    printf("\t-O         : Old Multiple level output format - like -M but identity before samples\n\n");
     printf("\t-m directory : Program will cd to the directory before output\n");
     printf("\t-f         : Output to file (not stdout) to two files below\n");
     printf("\t           : Data:  hostname_<year><month><day>_<hour><minutes>.json\n");
@@ -2672,6 +2642,22 @@ void hint(char* program, char* version)
     printf("    6 Crontab - for pumping data to the precimon central collector\n");
     printf("\t* 0 * * * /usr/local/bin/precimon -s 300 -c 288 -i admin.acme.com -p 8181 -X SECRET42 \n");
     printf("\n");
+}
+
+void interrupt(int signum)
+{
+    switch (signum) {
+    case SIGUSR1:
+    case SIGUSR2:
+        fflush(NULL);
+        exit(0);
+        break;
+    case SIGTERM:
+    case SIGINT:
+    case SIGQUIT:
+        interrupted++;
+        break;
+    }
 }
 
 /* MAIN */
@@ -2728,12 +2714,13 @@ int main(int argc, char** argv)
 
     signal(SIGUSR1, interrupt);
     signal(SIGUSR2, interrupt);
-    signal(SIGKILL, interrupt);
+    signal(SIGINT, interrupt);
     signal(SIGTERM, interrupt);
+    signal(SIGQUIT, interrupt);
 
     uid = getuid();
 
-    while(-1 != (ch = getopt(argc, argv, "?hfm:SMOs:c:kdi:I:Pp:X:x"))) {
+    while(-1 != (ch = getopt(argc, argv, "?hfm:s:c:kdi:I:Pp:X:x"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -2746,16 +2733,6 @@ int main(int argc, char** argv)
             directory_set = 1;
             strncpy(directory, optarg, 4096);
             directory[4096] = 0;
-            break;
-        case 'S':
-            mode = ONE_LEVEL;
-            break;
-        case 'M':
-            mode = MULTI_LEVEL;
-            break;
-        case 'O':
-            mode = MULTI_LEVEL;
-            oldmode = 1;
             break;
         case 's':
             seconds = atoi(optarg);
@@ -2859,11 +2836,13 @@ int main(int argc, char** argv)
             tim->tm_mday,
             tim->tm_hour,
             tim->tm_min);
+
         if ((fp = freopen(filename, "w", stdout)) == 0) {
             perror("opening file for stdout");
             fprintf(stderr, "ERROR nmon filename=%s\n", filename);
             exit(13);
         }
+
         sprintf(filename, "%s_%02d%02d%02d_%02d%02d.err",
             shorthostname,
             tim->tm_year,
@@ -2871,12 +2850,14 @@ int main(int argc, char** argv)
             tim->tm_mday,
             tim->tm_hour,
             tim->tm_min);
+
         if ((fp = freopen(filename, "w", stderr)) == 0) {
             perror("opening file for stderr");
             fprintf(stderr, "ERROR nmon filename=%s\n", filename);
             exit(14);
         }
     }
+
     fflush(NULL);
     /* disconnect from terminal */
     DEBUG printf("forking for daemon making if debug=%d === 0\n", debug);
@@ -2886,10 +2867,12 @@ int main(int argc, char** argv)
         exit(0); /* parent returns OK */
     }
     DEBUG printf("child running\n");
+
     if (!debug) {
         setpgrp(); /* become process group leader */
         signal(SIGHUP, SIG_IGN); /* ignore hangups */
     }
+
     output_size = 1024 * 1024;
     output = malloc(output_size); /* buffer space for the stats before the push to standard output */
     commlen = 1; /* for the terminating zero */
@@ -2930,16 +2913,14 @@ int main(int argc, char** argv)
     elapsed = previous_time - current_time;
 
     /* pre-amble */
-    if (mode == ONE_LEVEL) {
-        praw("[\n");
-    }
-    if (mode == MULTI_LEVEL) {
-        pstart();
-        if (oldmode)
-            identity(argv[0], VERSION);
-        if (samples)
-            praw("  \"samples\": [\n");
-    }
+    pstart();
+    identity(argv[0], VERSION);
+    etc_os_release();
+    proc_version();
+    lscpu();
+    proc_cpuinfo();
+    psnapshots();
+
     /* have to initialise just this one */
     execute_start = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
     for (loop = 0; maxloops == -1 || loop < maxloops; loop++) {
@@ -2974,7 +2955,7 @@ int main(int argc, char** argv)
         gettimeofday(&tv, 0);
         execute_start = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
 
-        psample();
+        psnapshot();
 #ifdef TIMERS
         /* for testing
         if(loop == 10) accumalated_delay += 1.5;
@@ -2999,18 +2980,8 @@ int main(int argc, char** argv)
 
         DEBUG pdouble("elapsed", elapsed);
 
-        if (mode == ONE_LEVEL) {
-            identity(argv[0], VERSION);
-        }
-
         date_time(seconds, loop, maxloops);
-        if (!oldmode)
-            identity(argv[0], VERSION);
-        etc_os_release();
-        proc_version();
-        lscpu();
         proc_stat(elapsed, PRINT_TRUE);
-        proc_cpuinfo();
         read_data_number("meminfo");
         read_data_number("vmstat");
         proc_diskstats(elapsed, PRINT_TRUE);
@@ -3025,29 +2996,27 @@ int main(int argc, char** argv)
         if (proc_mode)
             processes(elapsed);
         DEBUG praw("Sample");
-        psampleend(loop == (maxloops - 1));
-        push();
+        psnapshotend(loop == (maxloops - 1));
+
+        if(interrupted) {
+            if(maxloops == -1) {
+                break;
+            }
+        } else {
+            push();
+        }
+
         gettimeofday(&tv, 0);
         execute_end = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
         execute_time = execute_end - execute_start;
     }
     /* finish-of */
-    if (mode == ONE_LEVEL) {
-        remove_ending_comma_if_any();
-        praw("]\n");
-        if (precimon_stats)
-            pstats();
-    }
-    if (mode == MULTI_LEVEL) {
-        remove_ending_comma_if_any();
-        if (samples)
-            praw(" ]\n");
-        if (precimon_stats)
-            pstats();
-        pfinish();
-    }
+    psnapshots_end();
+    remove_ending_comma_if_any();
+
+    if (precimon_stats)
+        pstats();
+    pfinish();
     push();
     return 0;
 }
-
-/* - - - the end - - - */
