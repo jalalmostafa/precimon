@@ -3012,10 +3012,10 @@ int main(int argc, char** argv)
     }
     /* finish-of */
     psnapshots_end();
-    remove_ending_comma_if_any();
 
     if (precimon_stats)
         pstats();
+
     pfinish();
     push();
     return 0;
