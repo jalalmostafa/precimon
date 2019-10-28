@@ -26,7 +26,6 @@
 /* precimon version */
 #define VERSION "30@16/07/2019" /* version @ day / month / year */
 char version[] = VERSION;
-static char* SccsId = "precimon for Linux " VERSION;
 char* command;
 
 #include <ctype.h>
@@ -177,7 +176,6 @@ void unmix(char* s)
 
 void create_socket(char* ip_address, long port, char* hostname, char* utc, char* secretstr)
 {
-    int i;
     char buffer[8196];
     struct sockaddr_in hostsockaddr;
 
@@ -212,7 +210,7 @@ void create_socket(char* ip_address, long port, char* hostname, char* utc, char*
 
 void get_hostname()
 {
-    int i;
+    size_t i;
 
     FUNCTION_START;
     if (hostname[0] != 0)
@@ -528,7 +526,6 @@ int gpfs_grab()
     int i = 0;
     int index = 0;
     int records = 0;
-    int ret;
     int count;
     char b[1024];
     char buffer[2048];
@@ -546,7 +543,7 @@ int gpfs_grab()
     if (count >= 0) {
         buffer[count] = 0;
         /*                                       1      2      3      4      5      6      7      8      9      10     11 */
-        ret = sscanf(buffer, "%s %s %s %s %s %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld",
+        sscanf(buffer, "%s %s %s %s %s %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld",
             b, b, &ip[0],
             b, &nn[0],
             b, &gpfs_io_curr.rc,
@@ -592,7 +589,8 @@ int gpfs_grab()
         for (i = 0; i < records; i++) {
             /*_fs_io_s_ _n_ 192.168.50.20 _nn_ ems1-hs _rc_ 0 _t_ 1548519197 _tu_ 560916 _cl_ SBANK_ESS.gpfs.net _fs_ cesroot _d_ 4 _br_ 224331 _bw_ 225922 _oc_ 63 _cc_ 58 _rdc_ 35 _wc_ 34 _dir_ 2 _iu_ 14 */
             /*                                       1      2      3      4      5      6      7      8      9      10     11 */
-            ret = sscanf(&buffer[index], "%s %s %s %s %s %s %ld %s %ld %s %ld %s %s %s %s %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld",
+            sscanf(&buffer[index],
+                "%s %s %s %s %s %s %ld %s %ld %s %ld %s %s %s %s %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld %s %ld",
                 b, b, &ip[0],
                 b, &nn[0],
                 b, &gpfs_fs_curr[i].rc,
@@ -631,9 +629,6 @@ void gpfs_init()
 
     /* call shell script to start mmpmon binary */
     char* argv[] = { "/usr/lpp/mmfs/bin/mmksh", "-c", "/usr/lpp/mmfs/bin/mmpmon -s -p", 0 }; /* */
-
-    /* Alternative: direct start of mmpmon */
-    /* char *argv[]={ "/usr/lpp/mmfs/bin/tspmon", "1000", "1", "1", "0", "0", "60", "0", "/var/mmfs/mmpmon/mmpmonSocket", 0}; /* */
 
     FUNCTION_START;
     if (uid != (uid_t)0)
@@ -686,10 +681,8 @@ void gpfs_init()
 
 void gpfs_data(double elapsed)
 {
-    char buffer[10000];
     int records;
     int i;
-    int ret;
 
     FUNCTION_START;
     if (gpfs_na)
@@ -767,8 +760,6 @@ void init_lparcfg()
     char line[1024];
     char label[1024];
     char number[1024];
-    int i;
-    int len = 0;
 
     FUNCTION_START;
     if ((fp = fopen("/proc/ppc64/lparcfg", "r")) == NULL) {
@@ -904,7 +895,6 @@ read /proc/stat and unpick
 */
 void proc_stat(double elapsed, int print)
 {
-    int len;
     long long user;
     long long nice;
     long long sys;
@@ -918,7 +908,6 @@ void proc_stat(double elapsed, int print)
     int cpu_total = 0;
     int count;
     int cpuno;
-    int i;
     long long value;
     /* Static data */
     static FILE* fp = 0;
@@ -956,8 +945,6 @@ void proc_stat(double elapsed, int print)
         rewind(fp);
 
     while (fgets(line, 1000, fp) != NULL) {
-        len = strlen(line);
-
         if (!strncmp(line, "cpu", 3)) {
             if (!strncmp(line, "cpu ", 4)) { /* this is the first line and is the average total CPU stats */
                 cpu_total = 1;
@@ -1117,21 +1104,19 @@ void proc_diskstats(double elapsed, int print)
     long i;
     long j;
     long len;
-    char* ptr;
 
     FUNCTION_START;
-    if (fp == (FILE*)0) {
+    if (fp == NULL) {
         /* Just count the number of disks */
         pop = popen("lsblk --nodeps --output NAME,TYPE --raw 2>/dev/null", "r");
         if (pop != NULL) {
             /* throw away the headerline */
             tmpstr[0] = 0;
-            ptr = fgets(tmpstr, 127, pop);
+            fgets(tmpstr, 127, pop);
             for (disks = 0;; disks++) {
                 tmpstr[0] = 0;
                 if (fgets(tmpstr, 127, pop) == NULL)
                     break;
-                /*printf("DEBUG %ld disks - %s\n",disks,tmpstr);*/
             }
             pclose(pop);
         } else
@@ -1142,7 +1127,7 @@ void proc_diskstats(double elapsed, int print)
         pop = popen("lsblk --nodeps --output NAME,TYPE --raw 2>/dev/null", "r");
         if (pop != NULL) {
             /* throw away the headerline */
-            ptr = fgets(tmpstr, 70, pop);
+            fgets(tmpstr, 70, pop);
             for (i = 0; i < disks; i++) {
                 tmpstr[0] = 0;
                 if (fgets(tmpstr, 70, pop) == NULL)
@@ -1267,36 +1252,30 @@ void proc_net_dev(double elapsed, int print)
 {
     struct netinfo {
         char if_name[128];
-        long long if_ibytes;
-        long long if_ipackets;
-        long long if_ierrs;
-        long long if_idrop;
-        long long if_ififo;
-        long long if_iframe;
-        long long if_obytes;
-        long long if_opackets;
-        long long if_oerrs;
-        long long if_odrop;
-        long long if_ofifo;
-        long long if_ocolls;
-        long long if_ocarrier;
+        long long unsigned if_ibytes;
+        long long unsigned if_ipackets;
+        long long unsigned if_ierrs;
+        long long unsigned if_idrop;
+        long long unsigned if_ififo;
+        long long unsigned if_iframe;
+        long long unsigned if_obytes;
+        long long unsigned if_opackets;
+        long long unsigned if_oerrs;
+        long long unsigned if_odrop;
+        long long unsigned if_ofifo;
+        long long unsigned if_ocolls;
+        long long unsigned if_ocarrier;
     };
     static struct netinfo current;
     static struct netinfo* previous = NULL;
-    long long junk;
+    long long unsigned junk;
 
     static FILE* fp = 0;
     char buf[1024];
-    int if_stats;
     static long interfaces = 0;
     int ret;
     /* popen variables */
-    FILE* pop;
-    char tmpstr[1024 + 1];
     long i;
-    long j;
-    long len;
-    char* ptr;
 
     FUNCTION_START;
     if (fp == (FILE*)0) {
@@ -1379,7 +1358,7 @@ void proc_net_dev(double elapsed, int print)
 char* clean_string(char* s)
 {
     char buffer[256];
-    int i;
+    size_t i;
 
     while (s[0] == '"' || s[0] == ' ') { /* remove starting double quotes or spaces */
         strcpy(buffer, s);
@@ -1387,7 +1366,7 @@ char* clean_string(char* s)
     }
     for (i = 0; i < strlen(s); i++) /* change double quotes to space */
         if (s[i] == '"')
-            s[i] == ' ';
+            s[i] = ' ';
     while (s[strlen(s) - 1] == ' ') /* strip off trailing spaces */
         s[strlen(s) - 1] = 0;
     return s;
@@ -1403,7 +1382,7 @@ void etc_os_release()
     static char os_pretty[256] = "unknown";
     char buf[1024 + 1];
     char relname[1024];
-    int i;
+    size_t i;
 
     FUNCTION_START;
     if (firsttime) {
@@ -1481,7 +1460,7 @@ void proc_version()
 {
     static FILE* fp = 0;
     char buf[1024 + 1];
-    int i;
+    size_t i;
 
     FUNCTION_START;
     if (fp == 0) {
@@ -1686,7 +1665,6 @@ void proc_cpuinfo()
     char string[1024 + 1];
     double value;
     int int_val;
-    char label[512];
     int processor;
 
     FUNCTION_START;
@@ -1923,7 +1901,6 @@ void file_read_one_stat(char* file, char* name)
 
 void identity(char* command, char* version)
 {
-    char buf[1024 + 1];
     int i;
     /* hostname */
     char label[512];
@@ -1944,7 +1921,7 @@ void identity(char* command, char* version)
     pstring("hostname", hostname);
     pstring("shorthostname", shorthostname);
 
-    memset(&hints, 0, sizeof hints);
+    memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC; /*either IPV4 or IPV6*/
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_CANONNAME;
@@ -2006,7 +1983,7 @@ void identity(char* command, char* version)
 
     pstring("precimon_command", command);
     pstring("precimon_version", version);
-    if (pw = getpwuid(uid)) {
+    if ((pw = getpwuid(uid))) {
         pstring("username", pw->pw_name);
         plong("userid", uid);
     } else {
@@ -2370,9 +2347,9 @@ int proc_procsinfo(int pid, int index)
                     break;
                 }
                 if (strncmp("read_bytes:", buf, 11) == 0)
-                    sscanf(&buf[12], "%lld", &p->procs[index].read_io);
+                    sscanf(&buf[12], "%llu", &p->procs[index].read_io);
                 if (strncmp("write_bytes:", buf, 12) == 0)
-                    sscanf(&buf[13], "%lld", &p->procs[index].write_io);
+                    sscanf(&buf[13], "%llu", &p->procs[index].write_io);
             }
         }
 
@@ -2670,12 +2647,12 @@ int main(int argc, char** argv)
     int hostmode = 0;
 #endif
     int ch;
-    double elapsed;
+    double elapsed = 0;
     double previous_time;
     double current_time;
     double sleep_start;
     double sleep_end;
-    double sleep_time;
+    double sleep_time = 0;
     double execute_start = 0.0;
     double execute_end;
     double execute_time = 0.0;
@@ -2694,7 +2671,6 @@ int main(int argc, char** argv)
     int print_child_pid = 0;
     char datastring[256];
     pid_t childpid;
-    int* crashptr = NULL;
     int proc_mode = 0;
     int timers_mode = 0;
 
@@ -2957,16 +2933,6 @@ int main(int argc, char** argv)
         gettimeofday(&tv, 0);
         execute_start = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
 
-        if(timers_mode) {
-            psection("precimontime");
-            plong("precimon_seconds", seconds);
-            pdouble("precimon_sleep_time", sleep_time);
-            pdouble("precimon_execute_time", execute_time);
-            pdouble("precimon_accumalated", accumalated_delay);
-            plong("precimon_sleep_seconds", sleep_seconds);
-            psectionend();
-        }
-
         /* calculate elapsed time to include sleep and data collection time */
         if (loop != 0)
             previous_time = current_time;
@@ -2977,6 +2943,15 @@ int main(int argc, char** argv)
         DEBUG pdouble("elapsed", elapsed);
 
         psnapshot();
+        if(timers_mode) {
+            psection("timers");
+            plong("specified_seconds", seconds);
+            pdouble("calculated_sleep_time", sleep_time);
+            pdouble("calculated_execute_time", execute_time);
+            pdouble("calculated_accumalated", accumalated_delay);
+            plong("actual_sleep_seconds", sleep_seconds);
+            psectionend();
+        }
         date_time(seconds, loop, maxloops);
         proc_stat(elapsed, PRINT_TRUE);
         read_data_number("meminfo");

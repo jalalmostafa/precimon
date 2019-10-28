@@ -98,7 +98,7 @@ void logger(int type, char *s1, char *s2, int number)
     }
 
     if((fd = open("precimon_collector.log", O_CREAT| O_WRONLY | O_APPEND, 0644)) >= 0) {
-        if (write(fd, logbuffer, strlen(logbuffer)) != strlen(logbuffer)) {
+        if (write(fd, logbuffer, strlen(logbuffer)) != (ssize_t)strlen(logbuffer)) {
             printf("Logfile: opened but failed to write\n");
             exit(99);
         }
@@ -110,11 +110,11 @@ void logger(int type, char *s1, char *s2, int number)
         exit(3);
 }
 
-void identify(int read, char* printbuffer, char* buffer, char* preamble, char* name, char* hostname,
+void identify(size_t read, char* printbuffer, char* buffer, char* preamble, char* name, char* hostname,
                 char* utc, char* remote_secret,
                 char* version, char* postamble)
 {
-    int j;
+    size_t j;
 
     buffer[read]=0; /* terminate the buffer */
     unmix(buffer);
@@ -166,12 +166,11 @@ void identify(int read, char* printbuffer, char* buffer, char* preamble, char* n
 }
 
 /* this is a child precimon_collector server process, so we can exit on errors */
-void child(int fd, int hit, FILE *pop, int save_json)
+void child(int fd, FILE *pop, int save_json)
 {
-    int j, json_file_fd, buflen, bytes;
+    int json_file_fd, bytes;
     int loops = 0;
-    long i, ret, len;
-    char* fstr;
+    long ret;
     char buffer[BUFSIZE + 1];
     char printbuffer[BUFSIZE + 1];
 
@@ -485,7 +484,7 @@ int main(int argc, char **argv)
             if(pid == 0) {
                 close(listenfd);
                 run_injector(injector, port, &pop);
-                child(socketfd, hit, pop, save_json); /* never returns */
+                child(socketfd, pop, save_json); /* never returns */
             } else {
                 /* parent */
                 close(socketfd);

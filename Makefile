@@ -1,5 +1,5 @@
 # Makefile for precimon for Linux
-CFLAGS=-g -O4
+CFLAGS=-g -O4 -pedantic -Wall -Wextra
 LDFLAGS=-g
 
 FILE=precimon.c
