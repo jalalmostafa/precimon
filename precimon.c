@@ -20,8 +20,6 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* Compile example: cc -O4 -g -o precimon precimon_linux.c */
-
 /* precimon_collector version needs to match the version in the precimon_collector.c */
 #define COLLECTOR_VERSION "12"
 
@@ -268,18 +266,18 @@ void pfinish()
 
 void psnapshot()
 {
-    DEBUG praw("SAMPLE");
-    praw("{\n"); /* start of sample */
+    DEBUG praw("SNAPSHOT");
+    praw("{\n"); /* start of snapshot */
 }
 
 void psnapshotend(int comma_needed)
 {
-    DEBUG praw("SAMPLEEND");
+    DEBUG praw("SNAPSHOTEND");
     remove_ending_comma_if_any();
     if (comma_needed)
-        praw("\t}"); /* end of sample */
+        praw("\t}"); /* end of snapshot */
     else
-        praw("\t},"); /* end of sample more to come */
+        praw("\t},"); /* end of snapshot more to come */
 }
 
 char* saved_section;
@@ -947,7 +945,7 @@ void proc_stat(double elapsed, int print)
     char label[512];
 
     FUNCTION_START;
-    /* printf("DEBUG\t--> proc_stat(%.4f, %d) max_cpuno=%d\n",elapsed, print,max_cpuno); */
+
     if (fp == 0) {
         if ((fp = fopen("/proc/stat", "r")) == NULL) {
             error("failed to open file /proc/stat");
@@ -1017,7 +1015,6 @@ void proc_stat(double elapsed, int print)
                     pdouble("nice", DELTA_LOGICAL(nice)); /* counter */
                     pdouble("sys", DELTA_LOGICAL(sys)); /* counter */
                     pdouble("idle", DELTA_LOGICAL(idle)); /* counter */
-                    /*			pdouble("DEBUG IDLE idle: %lld %lld %lld\n", logical_cpu[cpuno].idle, idle, idle-logical_cpu[cpuno].idle); */
                     pdouble("iowait", DELTA_LOGICAL(iowait)); /* counter */
                     pdouble("hardirq", DELTA_LOGICAL(hardirq)); /* counter */
                     pdouble("softirq", DELTA_LOGICAL(softirq)); /* counter */
@@ -2605,7 +2602,6 @@ void hint(char* program, char* version)
 #ifndef NOREMOTE
     printf("- precimon collector output: -i host -p port -X secret\n");
 #endif /* NOREMOTE */
-    /* not implemented yet printf("additional options: -P\n"); */
     printf("- Other options: -?\n");
     printf("\n");
     printf("\t-s seconds : seconds between snapshots of data (default 60 seconds)\n");
@@ -2700,6 +2696,7 @@ int main(int argc, char** argv)
     pid_t childpid;
     int* crashptr = NULL;
     int proc_mode = 0;
+    int timers_mode = 0;
 
     FUNCTION_START;
     s = getenv("PRECIMON_SECRET");
@@ -2720,7 +2717,7 @@ int main(int argc, char** argv)
 
     uid = getuid();
 
-    while(-1 != (ch = getopt(argc, argv, "?hfm:s:c:kdi:I:Pp:X:x"))) {
+    while(-1 != (ch = getopt(argc, argv, "?hfm:s:c:kdi:I:Pp:X:xT"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -2769,6 +2766,9 @@ int main(int argc, char** argv)
             break;
         case 'x':
             print_child_pid = 1;
+            break;
+        case 'T':
+            timers_mode = 1;
             break;
         }
     }
@@ -2898,14 +2898,13 @@ int main(int argc, char** argv)
 #endif /* NOGPFS */
     if (proc_mode)
         processes_init();
+
     gettimeofday(&tv, 0);
     previous_time = (double)tv.tv_sec + (double)tv.tv_usec * 1.0e-6;
 
-    if (seconds <= 60)
-        sleep_seconds = seconds;
-    else
-        sleep_seconds = 60; /* if a long time between snapshot do a quick one
-                               now so we have some stats in the output file */
+     /* if a long time between snapshots do a quick one
+        now so we have some stats in the output file */
+    sleep_seconds = seconds <= 60 ? seconds : 60;
     sleep(sleep_seconds);
 
     gettimeofday(&tv, 0);
@@ -2919,6 +2918,8 @@ int main(int argc, char** argv)
     proc_version();
     lscpu();
     proc_cpuinfo();
+    push();
+
     psnapshots();
 
     /* have to initialise just this one */
@@ -2940,6 +2941,7 @@ int main(int argc, char** argv)
                 sleep_seconds = 1;
             }
         }
+
         if (loop == 0) { /* don't calulate this on the first loop */
             accumalated_delay = 0.0;
         } else {
@@ -2955,21 +2957,15 @@ int main(int argc, char** argv)
         gettimeofday(&tv, 0);
         execute_start = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
 
-        psnapshot();
-#ifdef TIMERS
-        /* for testing
-        if(loop == 10) accumalated_delay += 1.5;
-        if(loop == 20) accumalated_delay += 2.5;
-        if(loop == 30) accumalated_delay += 3.5;
-    */
-        psection("precimontime");
-        plong("precimon_seconds", seconds);
-        pdouble("precimon_sleep_time", sleep_time);
-        pdouble("precimon_execute_time", execute_time);
-        pdouble("precimon_accumalated", accumalated_delay);
-        plong("precimon_sleep_seconds", sleep_seconds);
-        psectionend();
-#endif /* timers */
+        if(timers_mode) {
+            psection("precimontime");
+            plong("precimon_seconds", seconds);
+            pdouble("precimon_sleep_time", sleep_time);
+            pdouble("precimon_execute_time", execute_time);
+            pdouble("precimon_accumalated", accumalated_delay);
+            plong("precimon_sleep_seconds", sleep_seconds);
+            psectionend();
+        }
 
         /* calculate elapsed time to include sleep and data collection time */
         if (loop != 0)
@@ -2980,6 +2976,7 @@ int main(int argc, char** argv)
 
         DEBUG pdouble("elapsed", elapsed);
 
+        psnapshot();
         date_time(seconds, loop, maxloops);
         proc_stat(elapsed, PRINT_TRUE);
         read_data_number("meminfo");
@@ -2995,7 +2992,7 @@ int main(int argc, char** argv)
 #endif /* NOGPFS */
         if (proc_mode)
             processes(elapsed);
-        DEBUG praw("Sample");
+        DEBUG praw("Snapshot");
         psnapshotend(loop == (maxloops - 1));
 
         if(interrupted) {
