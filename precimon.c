@@ -441,7 +441,7 @@ void get_utc()
     tim->tm_mon += 1; /* because it is 0 to 11 */
 }
 
-void date_time(long seconds, long loop, long maxloops)
+void date_time(long seconds, long loop)
 {
     char buffer[256];
 
@@ -468,7 +468,6 @@ void date_time(long seconds, long loop, long maxloops)
         tim->tm_sec);
     pstring("UTC", buffer);
     plong("snapshot_seconds", seconds);
-    plong("snapshot_maxloops", maxloops);
     plong("snapshot_loop", loop);
     psectionend();
 }
@@ -1992,6 +1991,34 @@ void identity(char* command, char* version)
     psectionend();
 }
 
+#ifndef NOREMOTE
+void config(int debugging, long maxloops, long seconds, int process_mode, int remote_mode, char* host, long port, char* secret) {
+#else
+void config(int debugging, long maxloops, long seconds, int process_mode) {
+#endif
+    psection("config");
+    pstring("debugging", debugging ? "yes" : "no");
+    if(maxloops == -1) {
+        pstring("maxloops", "infinite");
+    } else {
+        plong("maxloops", maxloops);
+    }
+    plong("seconds", seconds);
+    pstring("process_mode", process_mode ? "yes" : "no");
+#ifndef NOREMOTE
+    if(remote_mode) {
+        psub("remote_mode");
+        pstring("host", host);
+        plong("port", port);
+        pstring("secret", secret);
+        psubend();
+    } else {
+        pstring("remote_mode", "no");
+    }
+#endif
+    psectionend();
+}
+
 /* check_pid_file() and make_pid_file()
  *    If you start precimon and it finds there is a copy running already then it will quitely stop.
  *       You can hourly start precimon via crontab and not end up with dozens of copies runnings.
@@ -2890,6 +2917,11 @@ int main(int argc, char** argv)
     /* pre-amble */
     pstart();
     identity(argv[0], VERSION);
+#ifndef NOREMOTE
+    config(debug, maxloops, seconds, proc_mode, hostmode, hostname, port, secret);
+#else
+    config(debug, maxloops, seconds, proc_mode);
+#endif
     etc_os_release();
     proc_version();
     lscpu();
@@ -2952,7 +2984,8 @@ int main(int argc, char** argv)
             plong("actual_sleep_seconds", sleep_seconds);
             psectionend();
         }
-        date_time(seconds, loop, maxloops);
+
+        date_time(seconds, loop);
         proc_stat(elapsed, PRINT_TRUE);
         read_data_number("meminfo");
         read_data_number("vmstat");
