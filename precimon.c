@@ -24,7 +24,7 @@
 #define COLLECTOR_VERSION "12"
 
 /* precimon version */
-#define VERSION "30@16/07/2019" /* version @ day / month / year */
+#define VERSION "0.1"
 char version[] = VERSION;
 char* command;
 
@@ -189,7 +189,7 @@ void create_socket(char* ip_address, long port, char* hostname, char* utc, char*
     hostsockaddr.sin_family = AF_INET;
     hostsockaddr.sin_port = htons(port);
 
-    if(inet_pton(AF_INET, ip_address, &hostsockaddr.sin_addr) <= 0){
+    if (inet_pton(AF_INET, ip_address, &hostsockaddr.sin_addr) <= 0){
         printf("hostname=%s is not valid\n", ip_address);
         exit(55);
     }
@@ -324,9 +324,9 @@ void psubend()
 {
     saved_resource = NULL;
     remove_ending_comma_if_any();
+    saved_level--;
     indent();
     praw("},\n");
-    saved_level--;
 }
 
 void psectionend()
@@ -345,7 +345,7 @@ void psnapshots_end()
     saved_resource = NULL;
     saved_level--;
 
-    if(output[output_char - 1] == ',') {
+    if (output[output_char - 1] == ',') {
         output_char--;
     }
     praw("],\n");
@@ -364,6 +364,14 @@ void plong(char* name, long long value)
     indent();
     precimon_long++;
     output_char += sprintf(&output[output_char], "\"%s\": %lld,\n", name, value);
+    DEBUG printf("plong(%s,%lld) count=%ld\n", name, value, output_char);
+}
+
+void pulong(char* name, long long unsigned value)
+{
+    indent();
+    precimon_long++;
+    output_char += sprintf(&output[output_char], "\"%s\": %llu,\n", name, value);
     DEBUG printf("plong(%s,%lld) count=%ld\n", name, value, output_char);
 }
 
@@ -422,6 +430,22 @@ int error(char* buf)
 time_t timer; /* used to work out the time details*/
 struct tm* tim; /* used to work out the local hour/min/second */
 
+long long unsigned nanomonotime() {
+    struct timespec tspec;
+    clock_gettime(CLOCK_MONOTONIC, &tspec);
+    return tspec.tv_sec * 1e9 + tspec.tv_nsec;
+}
+
+void nanomonosleep(long sec, long nsec) {
+    struct timespec tspec;
+    long sum;
+    clock_gettime(CLOCK_MONOTONIC, &tspec);
+    sum = tspec.tv_nsec + nsec;
+    tspec.tv_nsec = sum % (long)1e9;
+    tspec.tv_sec += sec + (long)(sum / 1e9);
+    clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &tspec, NULL);
+}
+
 void get_time()
 {
     timer = time(0);
@@ -441,15 +465,12 @@ void get_utc()
     tim->tm_mon += 1; /* because it is 0 to 11 */
 }
 
-void date_time(long seconds, long loop)
+void datetime()
 {
     char buffer[256];
-
-    FUNCTION_START;
     /* This is ISO 8601 datatime string format - ughly but get over it! :-) */
     get_time();
     get_localtime();
-    psection("timestamp");
     sprintf(buffer, "%04d-%02d-%02dT%02d:%02d:%02d",
         tim->tm_year,
         tim->tm_mon,
@@ -467,8 +488,16 @@ void date_time(long seconds, long loop)
         tim->tm_min,
         tim->tm_sec);
     pstring("UTC", buffer);
-    plong("snapshot_seconds", seconds);
+}
+
+void snapshot_info(long loop)
+{
+
+    FUNCTION_START;
+    psection("snapshot_info");
+    datetime();
     plong("snapshot_loop", loop);
+    pulong("taken_at", nanomonotime());
     psectionend();
 }
 
@@ -1916,6 +1945,9 @@ void identity(char* command, char* version)
 
     FUNCTION_START;
     psection("identity");
+    pulong("system_monotime_nsec", nanomonotime());
+    datetime();
+
     get_hostname();
     pstring("hostname", hostname);
     pstring("shorthostname", shorthostname);
@@ -1992,13 +2024,13 @@ void identity(char* command, char* version)
 }
 
 #ifndef NOREMOTE
-void config(int debugging, long maxloops, long seconds, int process_mode, int remote_mode, char* host, long port, char* secret) {
+void config(int debugging, long long maxloops, long seconds, int process_mode, int remote_mode, char* host, long port, char* secret) {
 #else
-void config(int debugging, long maxloops, long seconds, int process_mode) {
+void config(int debugging, long long maxloops, long seconds, int process_mode) {
 #endif
     psection("config");
     pstring("debugging", debugging ? "yes" : "no");
-    if(maxloops == -1) {
+    if (maxloops == -1) {
         pstring("maxloops", "infinite");
     } else {
         plong("maxloops", maxloops);
@@ -2006,7 +2038,7 @@ void config(int debugging, long maxloops, long seconds, int process_mode) {
     plong("seconds", seconds);
     pstring("process_mode", process_mode ? "yes" : "no");
 #ifndef NOREMOTE
-    if(remote_mode) {
+    if (remote_mode) {
         psub("remote_mode");
         pstring("host", host);
         plong("port", port);
@@ -2619,7 +2651,7 @@ void hint(char* program, char* version)
     printf("\t-I percent : Set ignore process percent threshold (default 0.01%%)\n");
     printf("\t-? or -h   : This output and stop\n");
     printf("\t-d         : Switch on debugging\n");
-
+    printf("\t-C         : Output precimon configuration to the JSON file\n");
 #ifndef NOREMOTE
     printf("Push data to collector: add -h hostname -p port\n");
     printf("\t-i ip      : IP address or hostname of the precimon central collector\n");
@@ -2647,15 +2679,10 @@ void hint(char* program, char* version)
 void interrupt(int signum)
 {
     switch (signum) {
-    case SIGUSR1:
-    case SIGUSR2:
-        fflush(NULL);
-        exit(0);
-        break;
     case SIGTERM:
     case SIGINT:
     case SIGQUIT:
-        interrupted++;
+        interrupted = signum;
         break;
     }
 }
@@ -2665,8 +2692,8 @@ void interrupt(int signum)
 int main(int argc, char** argv)
 {
     char secret[256] = { 'O', 'x', 'd', 'e', 'a', 'd', 'b', 'e', 'e', 'f', 0 };
-    long loop;
-    long maxloops = -1;
+    long long loop;
+    long long maxloops = -1;
     long seconds = 60;
 #ifndef NOREMOTE
     long port = -1;
@@ -2674,19 +2701,15 @@ int main(int argc, char** argv)
     int hostmode = 0;
 #endif
     int ch;
-    double elapsed = 0;
-    double previous_time;
-    double current_time;
-    double sleep_start;
-    double sleep_end;
-    double sleep_time = 0;
-    double execute_start = 0.0;
-    double execute_end;
-    double execute_time = 0.0;
-    double accumalated_delay = 0.0;
-    long tmp_long;
-    long sleep_seconds;
-    struct timeval tv;
+    long long unsigned sleep_start;
+    long long unsigned sleep_end;
+    long long unsigned sleep_time = 0;
+    long long unsigned execute_start = 0;
+    long long unsigned execute_end = 0;
+    long long unsigned execute_time = 0;
+    long long unsigned sleep_nanoseconds;
+    long unsigned sleep_seconds;
+    int output_config = 0;
     int commlen;
     int i;
     int file_output = 0;
@@ -2699,7 +2722,6 @@ int main(int argc, char** argv)
     char datastring[256];
     pid_t childpid;
     int proc_mode = 0;
-    int timers_mode = 0;
 
     FUNCTION_START;
     s = getenv("PRECIMON_SECRET");
@@ -2712,15 +2734,13 @@ int main(int argc, char** argv)
     if (s != 0)
         strncpy(secret, s, 128);
 
-    signal(SIGUSR1, interrupt);
-    signal(SIGUSR2, interrupt);
     signal(SIGINT, interrupt);
     signal(SIGTERM, interrupt);
     signal(SIGQUIT, interrupt);
 
     uid = getuid();
 
-    while(-1 != (ch = getopt(argc, argv, "?hfm:s:c:kdi:I:Pp:X:xT"))) {
+    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:kdi:I:Pp:X:xC"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -2770,8 +2790,8 @@ int main(int argc, char** argv)
         case 'x':
             print_child_pid = 1;
             break;
-        case 'T':
-            timers_mode = 1;
+        case 'C':
+            output_config = 1;
             break;
         }
     }
@@ -2890,10 +2910,11 @@ int main(int argc, char** argv)
             strcat(command, " ");
     }
 
+    execute_start = nanomonotime();
     /* seed incrementing counters */
-    proc_stat(elapsed, PRINT_FALSE);
-    proc_diskstats(elapsed, PRINT_FALSE);
-    proc_net_dev(elapsed, PRINT_FALSE);
+    proc_stat(0, PRINT_FALSE);
+    proc_diskstats(0, PRINT_FALSE);
+    proc_net_dev(0, PRINT_FALSE);
     init_lparcfg();
     sys_device_system_cpu(1.0, PRINT_FALSE);
 #ifndef NOGPFS
@@ -2902,26 +2923,18 @@ int main(int argc, char** argv)
     if (proc_mode)
         processes_init();
 
-    gettimeofday(&tv, 0);
-    previous_time = (double)tv.tv_sec + (double)tv.tv_usec * 1.0e-6;
-
-     /* if a long time between snapshots do a quick one
-        now so we have some stats in the output file */
-    sleep_seconds = seconds <= 60 ? seconds : 60;
-    sleep(sleep_seconds);
-
-    gettimeofday(&tv, 0);
-    current_time = (double)tv.tv_sec + (double)tv.tv_usec * 1.0e-6;
-    elapsed = previous_time - current_time;
-
     /* pre-amble */
     pstart();
     identity(argv[0], VERSION);
+
+    if(output_config) {
 #ifndef NOREMOTE
-    config(debug, maxloops, seconds, proc_mode, hostmode, hostname, port, secret);
+        config(debug, maxloops, seconds, proc_mode, hostmode, hostname, port, secret);
 #else
-    config(debug, maxloops, seconds, proc_mode);
+        config(debug, maxloops, seconds, proc_mode);
 #endif
+    }
+
     etc_os_release();
     proc_version();
     lscpu();
@@ -2929,91 +2942,63 @@ int main(int argc, char** argv)
     push();
 
     psnapshots();
+    execute_end = nanomonotime();
 
-    /* have to initialise just this one */
-    execute_start = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
+#define EXECUTE_TIME (execute_time = execute_end - execute_start)
+#define SLEEP_SECONDS (sleep_seconds = sleep_nanoseconds != 0 && sleep_nanoseconds < 1e9 ? seconds - 1 : seconds - (long)(execute_time / 1e9))
+#define SLEEP_NANOSECONDS (sleep_nanoseconds = execute_time == 0 ? 0 : (long)(1e9 - (execute_time % (long)1e9)))
+
+    EXECUTE_TIME;
+    SLEEP_NANOSECONDS;
+    SLEEP_SECONDS;
+
+    sleep_start = nanomonotime();
+    nanomonosleep(sleep_seconds, sleep_nanoseconds);
+    sleep_end = nanomonotime();
+    sleep_time = sleep_end - sleep_start;
     for (loop = 0; maxloops == -1 || loop < maxloops; loop++) {
-        if (accumalated_delay < 1.0) {
-            sleep_seconds = seconds;
-        } else {
-            /* double to long coercion removes the fraction of a second */
-            tmp_long = (long)(accumalated_delay);
-            sleep_seconds = seconds - tmp_long;
-            accumalated_delay = accumalated_delay - (double)tmp_long;
-            /* add some sanity checks so we don't try to handle negative seconds */
-            if (accumalated_delay < 0.0) {
-                accumalated_delay = 0.0;
-            }
-            if (sleep_seconds < 1) {
-                /* minimum sleep(1) */
-                sleep_seconds = 1;
-            }
-        }
+        execute_start = nanomonotime();
 
-        if (loop == 0) { /* don't calulate this on the first loop */
-            accumalated_delay = 0.0;
-        } else {
-            DEBUG printf("calling sleep(%ld) . . .\n", seconds);
-            gettimeofday(&tv, 0);
-            sleep_start = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
-            sleep(sleep_seconds);
-            gettimeofday(&tv, 0);
-            sleep_end = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
-            sleep_time = sleep_end - sleep_start;
-            accumalated_delay += sleep_time - (double)sleep_seconds + execute_time;
-        }
-        gettimeofday(&tv, 0);
-        execute_start = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
-
-        /* calculate elapsed time to include sleep and data collection time */
-        if (loop != 0)
-            previous_time = current_time;
-        gettimeofday(&tv, 0);
-        current_time = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
-        elapsed = current_time - previous_time;
-
-        DEBUG pdouble("elapsed", elapsed);
+        DEBUG pulong("elapsed", sleep_time);
 
         psnapshot();
-        if(timers_mode) {
-            psection("timers");
-            plong("specified_seconds", seconds);
-            pdouble("calculated_sleep_time", sleep_time);
-            pdouble("calculated_execute_time", execute_time);
-            pdouble("calculated_accumalated", accumalated_delay);
-            plong("actual_sleep_seconds", sleep_seconds);
-            psectionend();
-        }
-
-        date_time(seconds, loop);
-        proc_stat(elapsed, PRINT_TRUE);
+        snapshot_info(loop);
+        proc_stat(sleep_time * 1e-9, PRINT_TRUE);
         read_data_number("meminfo");
         read_data_number("vmstat");
-        proc_diskstats(elapsed, PRINT_TRUE);
-        proc_net_dev(elapsed, PRINT_TRUE);
+        proc_diskstats(sleep_time * 1e-9, PRINT_TRUE);
+        proc_net_dev(sleep_time * 1e-9, PRINT_TRUE);
         proc_uptime();
         filesystems();
-        read_lparcfg(elapsed);
-        sys_device_system_cpu(elapsed, PRINT_TRUE);
+        read_lparcfg(sleep_time * 1e-9);
+        sys_device_system_cpu(sleep_time * 1e-9, PRINT_TRUE);
 #ifndef NOGPFS
-        gpfs_data(elapsed);
+        gpfs_data(sleep_time * 1e-9);
 #endif /* NOGPFS */
         if (proc_mode)
-            processes(elapsed);
+            processes(sleep_time * 1e-9);
         DEBUG praw("Snapshot");
         psnapshotend(loop == (maxloops - 1));
 
-        if(interrupted) {
-            if(maxloops == -1) {
+        if (interrupted) {
+            if (maxloops == -1) {
+                fprintf(stderr, "signal=%d received at loop=%lld, breaking and exiting gracefully...\n", interrupted, loop);
                 break;
             }
         } else {
             push();
         }
 
-        gettimeofday(&tv, 0);
-        execute_end = (double)tv.tv_sec + ((double)tv.tv_usec * 1.0e-6);
-        execute_time = execute_end - execute_start;
+        execute_end = nanomonotime();
+        EXECUTE_TIME;
+        SLEEP_NANOSECONDS;
+        SLEEP_SECONDS;
+
+        DEBUG printf("loop=%lld, nanomonosleep(%lu, %llu) . . .\n", loop, sleep_seconds, sleep_nanoseconds);
+        sleep_start = nanomonotime();
+        nanomonosleep(sleep_seconds, sleep_nanoseconds);
+        sleep_end = nanomonotime();
+        sleep_time = sleep_end - sleep_start;
     }
     /* finish-of */
     psnapshots_end();
