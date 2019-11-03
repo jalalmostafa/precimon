@@ -2959,7 +2959,6 @@ int main(int argc, char** argv)
         }
 
         if (loop == maxloops) {
-            fprintf(stderr, "loop=%lld == maxloops=%lld\n", loop, maxloops);
             break;
         }
 
