@@ -2623,7 +2623,6 @@ void hint(char* program, char* version)
     printf("\t-f         : Output to file (not stdout) to two files below\n");
     printf("\t           : Data:  hostname_<year><month><day>_<hour><minutes>.json\n");
     printf("\t           : Error: hostname_<year><month><day>_<hour><minutes>.err\n");
-    printf("\t-k         : Read /tmp/precimon.pid for a running precimon PID & if found running then this copy exits\n");
     printf("\t-P         : Add process stats (take CPU cycles and large stats volume)\n");
     printf("\t-I percent : Set ignore process percent threshold (default 0.01%%)\n");
     printf("\t-? or -h   : This output and stop\n");
@@ -2983,10 +2982,8 @@ int main(int argc, char** argv)
             processes(sleep_time * 1e-9);
 
         if (interrupted) {
-            if (maxloops == -1) {
-                fprintf(stderr, "signal=%d received at loop=%lld, breaking and exiting gracefully...\n", interrupted, loop);
-                loop = maxloops - 1;
-            }
+            fprintf(stderr, "signal=%d received at loop=%lld, breaking and exiting gracefully...\n", interrupted, loop);
+            loop = maxloops - 1;
         } else {
             push();
         }
