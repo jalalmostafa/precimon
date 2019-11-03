@@ -38,6 +38,7 @@ char* command;
 #include <stdlib.h>
 #include <string.h>
 #include <sys/errno.h>
+#include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -2051,7 +2052,7 @@ void config(int debugging, long long maxloops, long seconds, int process_mode) {
     psectionend();
 }
 
-/* check_pid_file() and make_pid_file()
+/* lock_pid_file()
  *    If you start precimon and it finds there is a copy running already then it will quitely stop.
  *       You can hourly start precimon via crontab and not end up with dozens of copies runnings.
  *          It also means if the server reboots then precimon start in the next hour.
@@ -2059,58 +2060,34 @@ void config(int debugging, long long maxloops, long seconds, int process_mode) {
  *              */
 char pid_filename[] = "/tmp/precimon.pid";
 
-void make_pid_file()
-{
-    int fd;
-    int ret;
+void do_lock(int fd) {
     char buffer[32];
 
-    FUNCTION_START;
-    if ((fd = creat(pid_filename, O_CREAT | O_WRONLY)) < 0) {
-        printf("can't open new file for writing fd=%d\n", fd);
-        perror("open");
-        return; /* no file */
+    if (flock(fd, LOCK_EX | LOCK_NB) < 0) {
+        if (EWOULDBLOCK == errno) {
+            printf("Precimon is already running, terminating...\n");
+            exit(13);
+        }
+    } else {
+        sprintf(buffer, "%d \n", getpid());
+        buffer[31] = 0;
+        write(fd, buffer, strlen(buffer));
     }
-    printf("write file descriptor=%d\n", fd);
-    sprintf(buffer, "%d \n", getpid());
-    printf("write \"%s\"\n", buffer);
-    if ((ret = write(fd, buffer, strlen(buffer))) <= 0)
-        printf("write failed ret=%d\n", ret);
-    close(fd);
 }
 
-void check_pid_file()
+int lock_pid_file()
 {
-    char buffer[32];
     int fd;
-    pid_t pid;
-    int ret;
 
     FUNCTION_START;
-    if ((fd = open(pid_filename, O_RDONLY)) < 0) {
-        printf("no file or can't open it\n");
-        make_pid_file();
-        return; /* no file */
+    if ((fd = open(pid_filename, O_CREAT | O_WRONLY, S_IRWXU | S_IRWXG)) < 0) {
+        perror("open");
+        printf("Cannot create lock file, terminating...\n");
+        exit(13);
     }
-    printf("file descriptor=%d\n", fd);
-    printf("file exists and readable and opened\n");
-    if (read(fd, buffer, 31) > 0) { /* has some data */
-        printf("file has some content\n");
-        buffer[31] = 0;
-        if (sscanf(buffer, "%d", &pid) == 1) {
-            printf("read a pid from the file OK = %d\n", pid);
-            ret = kill(pid, 0);
-            printf("kill(%d, 0) = returned =%d\n", pid, ret);
-            if (ret == 0) {
-                printf("we have a precimon running - exit\n");
-                exit(13);
-            }
-        }
-    }
-    /* if we got here there is a file but the content is duff or the process is not running */
-    close(fd);
-    remove(pid_filename);
-    make_pid_file();
+
+    do_lock(fd);
+    return fd;
 }
 
 /* --- Top Processes Start --- */
@@ -2719,11 +2696,13 @@ int main(int argc, char** argv)
     char* s;
     FILE* fp;
     int print_child_pid = 0;
+    int pid_file_fd;
     char datastring[256];
     pid_t childpid;
     int proc_mode = 0;
 
     FUNCTION_START;
+    pid_file_fd = lock_pid_file();
     s = getenv("PRECIMON_SECRET");
     if (s != 0)
         debug = atoi(s);
@@ -2740,7 +2719,7 @@ int main(int argc, char** argv)
 
     uid = getuid();
 
-    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:kdi:I:Pp:X:xC"))) {
+    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:di:I:Pp:X:xC"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -2761,9 +2740,6 @@ int main(int argc, char** argv)
             break;
         case 'c':
             maxloops = atoi(optarg);
-            break;
-        case 'k':
-            check_pid_file();
             break;
         case 'd':
             debug++;
@@ -2795,6 +2771,7 @@ int main(int argc, char** argv)
             break;
         }
     }
+
 #ifndef NOREMOTE
     if (hostmode == 1 && port <= 0) {
         printf("%s -i %s set but not the -p port option\n", argv[0], host);
@@ -2884,11 +2861,18 @@ int main(int argc, char** argv)
     fflush(NULL);
     /* disconnect from terminal */
     DEBUG printf("forking for daemon making if debug=%d === 0\n", debug);
-    if (!debug && (childpid = fork()) != 0) {
-        if (print_child_pid)
-            printf("%d\n", childpid);
-        exit(0); /* parent returns OK */
+
+    if (!debug) {
+        flock(pid_file_fd, LOCK_UN);
+        if ((childpid = fork()) != 0) {
+            if (print_child_pid)
+                printf("%d\n", childpid);
+            exit(0); /* parent returns OK */
+        } else {
+            do_lock(pid_file_fd);
+        }
     }
+
     DEBUG printf("child running\n");
 
     if (!debug) {
