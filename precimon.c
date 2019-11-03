@@ -82,7 +82,7 @@ long output_size = 0;
 long output_char = 0;
 char* nullstring = "";
 long level = 0;
-int interrupted = 0;
+volatile sig_atomic_t interrupted = 0;
 
 #ifndef NOREMOTE
 char hostname[256] = { 0 };
@@ -269,11 +269,11 @@ void psnapshot()
     praw("{\n"); /* start of snapshot */
 }
 
-void psnapshotend(int comma_needed)
+void psnapshotend(int no_comma)
 {
     DEBUG praw("SNAPSHOTEND");
     remove_ending_comma_if_any();
-    if (comma_needed)
+    if (no_comma)
         praw("\t}"); /* end of snapshot */
     else
         praw("\t},"); /* end of snapshot more to come */
@@ -2700,6 +2700,7 @@ int main(int argc, char** argv)
     char datastring[256];
     pid_t childpid;
     int proc_mode = 0;
+    int timers_mode = 0;
 
     FUNCTION_START;
     pid_file_fd = lock_pid_file();
@@ -2719,7 +2720,7 @@ int main(int argc, char** argv)
 
     uid = getuid();
 
-    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:di:I:Pp:X:xC"))) {
+    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:di:I:Pp:X:xCT"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -2768,6 +2769,9 @@ int main(int argc, char** argv)
             break;
         case 'C':
             output_config = 1;
+            break;
+        case 'T':
+            timers_mode = 1;
             break;
         }
     }
@@ -2940,10 +2944,27 @@ int main(int argc, char** argv)
     nanomonosleep(sleep_seconds, sleep_nanoseconds);
     sleep_end = nanomonotime();
     sleep_time = sleep_end - sleep_start;
-    for (loop = 0; maxloops == -1 || loop < maxloops; loop++) {
+    for (loop = 0; maxloops == -1 || loop <= maxloops; loop++) {
         execute_start = nanomonotime();
 
+        if (loop != 0) {
+            if (timers_mode) {
+                psection("timers");
+                pulong("decided_sleep_time", sleep_seconds * 1e9 + sleep_nanoseconds);
+                pulong("actual_sleep_time", sleep_time);
+                pulong("execute_time", execute_time);
+                psectionend();
+            }
+            psnapshotend(loop == maxloops);
+        }
+
+        if (loop == maxloops) {
+            fprintf(stderr, "loop=%lld == maxloops=%lld\n", loop, maxloops);
+            break;
+        }
+
         DEBUG pulong("elapsed", sleep_time);
+        DEBUG praw("Snapshot");
 
         psnapshot();
         snapshot_info(loop);
@@ -2961,13 +2982,11 @@ int main(int argc, char** argv)
 #endif /* NOGPFS */
         if (proc_mode)
             processes(sleep_time * 1e-9);
-        DEBUG praw("Snapshot");
-        psnapshotend(loop == (maxloops - 1));
 
         if (interrupted) {
             if (maxloops == -1) {
                 fprintf(stderr, "signal=%d received at loop=%lld, breaking and exiting gracefully...\n", interrupted, loop);
-                break;
+                loop = maxloops - 1;
             }
         } else {
             push();
@@ -2975,14 +2994,16 @@ int main(int argc, char** argv)
 
         execute_end = nanomonotime();
         EXECUTE_TIME;
-        SLEEP_NANOSECONDS;
-        SLEEP_SECONDS;
+        if (maxloops != 1 && loop != maxloops) {
+            SLEEP_NANOSECONDS;
+            SLEEP_SECONDS;
 
-        DEBUG printf("loop=%lld, nanomonosleep(%lu, %llu) . . .\n", loop, sleep_seconds, sleep_nanoseconds);
-        sleep_start = nanomonotime();
-        nanomonosleep(sleep_seconds, sleep_nanoseconds);
-        sleep_end = nanomonotime();
-        sleep_time = sleep_end - sleep_start;
+            DEBUG printf("loop=%lld, nanomonosleep(%lu, %llu) . . .\n", loop, sleep_seconds, sleep_nanoseconds);
+            sleep_start = nanomonotime();
+            nanomonosleep(sleep_seconds, sleep_nanoseconds);
+            sleep_end = nanomonotime();
+            sleep_time = sleep_end - sleep_start;
+        }
     }
     /* finish-of */
     psnapshots_end();
