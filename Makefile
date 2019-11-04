@@ -1,22 +1,17 @@
 # Makefile for precimon for Linux
-CFLAGS=-g -O4 -pedantic -Wall -Wextra
-LDFLAGS=-g
+CFLAGS := $(CFLAGS) -g -O4 -pedantic -Wall
+LDFLAGS = -g
 
-FILE=precimon.c
-FILE_COLLECTOR=precimon_collector.c
-OUT=precimon
-OUT_COLLECTOR=collector
+TARGET = precimon
+OBJS = precimon.o
+TARGET_COLLECTOR=collector
+OBJS_COLLECTOR=precimon_collector.o
 
-.PHONY: clean $(OUT_COLLECTOR) $(OUT) all
 
-all: $(OUT) $(OUT_COLLECTOR)
+$(TARGET): $(OBJS)
 
-$(OUT):
-	cc $(CFLAGS) -o $(OUT) $(FILE) $(LDFLAGS)
-
-$(OUT_COLLECTOR):
-	cc $(CFLAGS) -o $(OUT_COLLECTOR) $(FILE_COLLECTOR) $(LDFLAGS)
+$(TARGET_COLLECTOR): $(OBJS_COLLECTOR)
 
 clean:
-	rm $(OUT) $(OUT_COLLECTOR)
+	rm -f $(TARGET) $(TARGET_COLLECTOR)
 
