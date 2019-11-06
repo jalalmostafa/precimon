@@ -4,6 +4,8 @@ PRECIse MONitor (precimon - pronounced pre-simon) is an opinionated system monit
 
 ## Commandline tool
 
+### precimon
+
 The tool samples `/proc` every N seconds then prints them to stdout or selected file. By default, N is 60 seconds. It also provide the following options:
 
 - `-s` seconds   : seconds between snapshots of data (default 60 seconds)
@@ -13,6 +15,7 @@ The tool samples `/proc` every N seconds then prints them to stdout or selected 
 - `-P`           : Add process stats (take CPU cycles and large stats volume)
 - `-I percent`   : Set ignore process percent threshold (default 0.01%)
 - `-C`           : Output precimon configuration to the JSON file
+- `-T`           : Output snapshot timers e.g. sleep time, execution time
 
 Examples:
 
@@ -29,6 +32,31 @@ The tool can also send the collected data through network using precimon collect
 Example:
 
 - `./precimon -s 10 -c 50 -i monitoring-machine.com -p 8888 -X password` runs a precimon instance that takes snapshots every 10 seconds for 50 cycles and sends data to `monitoring-machine.com:8888` using the secret `password`
+
+### precimon collector
+
+Collect precimon data from network using precimon collector.
+
+Example: precimon_collector -p 8181 -d /home/nigel
+Example: precimon_collector -p 8181 -d /home/sally -i -X abcd1234
+
+By default, collector saves the data to a file named hostname+date+time.json to the supplied directory.
+
+- `-d`                      Directory to save JSON file.
+- `-p`                      TCP port to listen for connections on.
+- `-X`                      Connection password. Or set this to the PRECIMON_SECRET shell variable.
+- `-a <collector.conf>`     Use configuration file instead of options. Do not mix this option with other command line options.
+
+collector.conf contents should be like this:
+
+```conf
+port=8181
+directory=/home/nag/precimondata
+secret=abc123
+json=1
+```
+
+Note: 1=on and 0=off
 
 ## How is this different from njmon
 
@@ -61,6 +89,7 @@ Hopefully, we want to include these features in vNext:
 
 - Metrics Alerts e.g. when total CPU percentage > 60%, alert using email
 - Single process monitoring e.g. `-P 1500` to output metrics of process whose pid is 1500
+- Database Injection Support for collector
 
 ## License
 

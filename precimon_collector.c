@@ -1,4 +1,5 @@
-#define VERSION 30
+#define _GNU_SOURCE
+#define VERSION "0.1"
 #define PROTOCOL_VERSION 12
 
 #include <stdio.h>
@@ -234,36 +235,55 @@ void child(int fd, FILE *pop, int save_json)
 void hint(char *command)
 {
     printf(
-    "hint: %s -p port -d directory [ -t protocol ] [ -i ] [ -X secret ] [ -c injector_command ] -n\n"
-    "or\n"
-    "hint: %s -a collector.conf\n"
-    "precimon Collector version=%d protocol=%d\n\n"
-    "Do not mix the -a option with the command line options\n"
-    "\tprecimon_collector daemon saves precimon output files\n"
-    "\tExample: precimon_collector -p 8181 -d /home/nigel\n"
-    "\tExample: precimon_collector -p 8181 -d /home/sally -i -X abcd1234\n"
-    "\tExample: precimon_collector -p 8181 -d /home/janet -i -X beetlejuice -c /home/janet/injector_for_DB42.py -n\n\n"
-    "\tDefault is just saving the file to the supplied directory based on hostname+date+time.json\n\n"
-    "\tWith the -i option is also pipes the data to an injector to a stats database\n"
-    "\t    You need to place a suitable injector for your stats database at %s (default).\n"
-    "\t    Override the full pathname of the injector with the -c option. Normally a Python program.\n\n"
-    "\tYou can set the shared secret (password or phrase) with the -X secret option.\n"
-    "\t    Or set this to the PRECIMON_SECRET shell variable.\n\n"
-    "\tIf using an injector then you can switch off saving to a JSON file with:\n"
-    "\t    -n\n\n"
-    "\tThis program disconnects from the terminal to run in the background.\n\n"
-    "\tcollector.conf contents should be like this:\n\n"
-    "\t\tport=8181\n"
-    "\t\tdirectory=/home/nag/precimondata\n"
-    "\t\tsecret=abc123\n"
-    "\t\tinject=1\n"
-    "\t\tinjector=/usr/local/bin/precimon_for_linux_to_InfluxDB_injector_30.py\n"
-    "\t\tjson=1\n"
-    "Note: for inject and json options: 1=on and 0=off\n\n"
-    "\tNo warranty given or implied\n"
-    "\tJalal Mostafa<jalalmostafa22@gmail.com>"
-    "\tModified version of Nigel Griffiths<nigelargriffiths@hotmail.com> NJMON Collector\n",
-        command, command, VERSION, PROTOCOL_VERSION, injector_command);
+#ifdef INJECTOR
+    "%s -p port -d directory [ -X secret ] [ -i ] [ -c injector_command ] [ -n ]\n"
+#else
+    "%s -p port -d directory [ -X secret ]\n"
+#endif
+    "%s -a collector.conf\n\n"
+    "precimon_collector backgroung daemon saves precimon output files.\n"
+    "precimon Collector version=%s protocol=%d\n\n"
+    "Example: precimon_collector -p 8181 -d /home/nigel\n"
+    "Example: precimon_collector -p 8181 -d /home/sally -i -X abcd1234\n"
+#ifdef INJECTOR
+    "Example: precimon_collector -p 8181 -d /home/janet -i -X beetlejuice -c /home/janet/injector_for_DB42.py -n\n\n"
+#endif
+    , command, command, VERSION, PROTOCOL_VERSION);
+    printf(
+    "By default, collector saves the data to a file named hostname+date+time.json to the supplied directory.\n\n"
+    "\t-d      Directory to save JSON file.\n"
+    "\t-p      TCP port to listen for connections on.\n"
+    "\t-X      Connection password.\n"
+    "\t        Or set this to the PRECIMON_SECRET shell variable.\n"
+#ifdef INJECTOR
+    "\t-i      Injector Mode. It pipes the data to an injector to a stats database.\n"
+    "\t        You need to place a suitable injector for your stats database at %s (default).\n"
+    "\t-c <injector_command>"
+    "\t        Override the full pathname of the injector with the -c option.\n"
+    "\t-n      If using an injector then you can switch off saving to a JSON file with:-n\n"
+#endif
+    "\t-a <collector.conf>\n"
+    "\t        Use configuration file instead of options.\n"
+    "\t        Do not mix this option with other command line options.\n\n"
+#ifdef INJECTOR
+    , injector_command);
+#else
+    );
+#endif
+    printf(
+    "\t        collector.conf contents should be like this:\n"
+    "\t        port=8181\n"
+    "\t        directory=/home/nag/precimondata\n"
+    "\t        secret=abc123\n"
+#ifdef INJECTOR
+    "\t        inject=1\n"
+    "\t        injector=/usr/local/bin/precimon_for_linux_to_InfluxDB_injector_30.py\n"
+#endif
+    "\t        json=1\n\n"
+    "\t        Note: 1=on and 0=off\n\n"
+    "No warranty given or implied\n"
+    "Jalal Mostafa<jalalmostafa22@gmail.com>\n"
+    "Modified version of Nigel Griffiths<nigelargriffiths@hotmail.com> NJMON Collector\n");
     exit(0);
 }
 

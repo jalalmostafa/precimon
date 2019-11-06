@@ -4,9 +4,8 @@ LDFLAGS = -g
 
 TARGET = precimon
 OBJS = precimon.o
-TARGET_COLLECTOR=collector
-OBJS_COLLECTOR=precimon_collector.o
-
+TARGET_COLLECTOR = precimon_collector
+OBJS_COLLECTOR = precimon_collector.o
 
 $(TARGET): $(OBJS)
 
