@@ -272,6 +272,13 @@ void psnapshotend(int no_comma)
 {
     DEBUG praw("SNAPSHOTEND");
     remove_ending_comma_if_any();
+    fprintf(stderr, "all: %s\n", output);
+    fprintf(stderr, "0: %d %c\n", output[output_char], output[output_char]);
+    fprintf(stderr, "1: %d %c\n", output[output_char - 1], output[output_char - 1]);
+    fprintf(stderr, "2: %d %c\n", output[output_char - 2], output[output_char - 2]);
+    fprintf(stderr, "3: %d %c\n", output[output_char - 3], output[output_char - 3]);
+    fprintf(stderr, "4: %d %c\n", output[output_char - 4], output[output_char - 4]);
+
     if (no_comma)
         praw("\t}"); /* end of snapshot */
     else
@@ -1140,11 +1147,12 @@ void proc_diskstats(double elapsed, int print)
         if (pop != NULL) {
             /* throw away the headerline */
             tmpstr[0] = 0;
-            fgets(tmpstr, 127, pop);
-            for (disks = 0;; disks++) {
-                tmpstr[0] = 0;
-                if (fgets(tmpstr, 127, pop) == NULL)
-                    break;
+            if(fgets(tmpstr, 127, pop) != NULL){
+                for(disks = 0;; disks++) {
+                    tmpstr[0] = 0;
+                    if (fgets(tmpstr, 127, pop) == NULL)
+                        break;
+                }
             }
             pclose(pop);
         } else
@@ -1155,17 +1163,18 @@ void proc_diskstats(double elapsed, int print)
         pop = popen("lsblk --nodeps --output NAME,TYPE --raw 2>/dev/null", "r");
         if (pop != NULL) {
             /* throw away the headerline */
-            fgets(tmpstr, 70, pop);
-            for (i = 0; i < disks; i++) {
-                tmpstr[0] = 0;
-                if (fgets(tmpstr, 70, pop) == NULL)
-                    break;
-                tmpstr[strlen(tmpstr)] = 0; /* remove NL char */
-                len = strlen(tmpstr);
-                for (j = 0; j < len; j++)
-                    if (tmpstr[j] == ' ')
-                        tmpstr[j] = 0;
-                strcpy(previous[i].dk_name, tmpstr);
+            if(fgets(tmpstr, 70, pop) != NULL) {
+                for(i = 0; i < disks; i++) {
+                    tmpstr[0] = 0;
+                    if(fgets(tmpstr, 70, pop) == NULL)
+                        break;
+                    tmpstr[strlen(tmpstr)] = 0; /* remove NL char */
+                    len = strlen(tmpstr);
+                    for (j = 0; j < len; j++)
+                        if (tmpstr[j] == ' ')
+                            tmpstr[j] = 0;
+                    strcpy(previous[i].dk_name, tmpstr);
+                }
             }
             pclose(pop);
         } else
@@ -2070,7 +2079,8 @@ void do_lock(int fd) {
     } else {
         sprintf(buffer, "%d \n", getpid());
         buffer[31] = 0;
-        write(fd, buffer, strlen(buffer));
+        if(write(fd, buffer, strlen(buffer)) < 0)
+            pexit("Cannot acquire lock");
     }
 }
 
@@ -2627,6 +2637,7 @@ void hint(char* program, char* version)
     printf("\t-? or -h   : This output and stop\n");
     printf("\t-d         : Switch on debugging\n");
     printf("\t-C         : Output precimon configuration to the JSON file\n");
+    printf("\t-T         : Output snapshot timers e.g. sleep time, execution time\n");
 #ifndef NOREMOTE
     printf("Push data to collector: add -h hostname -p port\n");
     printf("\t-i ip      : IP address or hostname of the precimon central collector\n");
@@ -2947,8 +2958,8 @@ int main(int argc, char** argv)
     for (loop = 0; maxloops == -1 || loop <= maxloops; loop++) {
         execute_start = nanomonotime();
 
-        if (loop != 0) {
-            if (timers_mode) {
+        if(loop != 0) {
+            if(timers_mode) {
                 psection("timers");
                 pulong("decided_sleep_time", sleep_seconds * 1e9 + sleep_nanoseconds);
                 pulong("actual_sleep_time", sleep_time);
@@ -2956,6 +2967,7 @@ int main(int argc, char** argv)
                 psectionend();
             }
             psnapshotend(loop == maxloops);
+            push();
         }
 
         if (loop == maxloops) {
@@ -2985,8 +2997,6 @@ int main(int argc, char** argv)
         if (interrupted) {
             fprintf(stderr, "signal=%d received at loop=%lld, breaking and exiting gracefully...\n", interrupted, loop);
             loop = maxloops - 1;
-        } else {
-            push();
         }
 
         execute_end = nanomonotime();
