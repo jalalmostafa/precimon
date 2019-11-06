@@ -262,29 +262,6 @@ void pfinish()
     praw("}\n");
 }
 
-void psnapshot()
-{
-    DEBUG praw("SNAPSHOT");
-    praw("{\n"); /* start of snapshot */
-}
-
-void psnapshotend(int no_comma)
-{
-    DEBUG praw("SNAPSHOTEND");
-    remove_ending_comma_if_any();
-    fprintf(stderr, "all: %s\n", output);
-    fprintf(stderr, "0: %d %c\n", output[output_char], output[output_char]);
-    fprintf(stderr, "1: %d %c\n", output[output_char - 1], output[output_char - 1]);
-    fprintf(stderr, "2: %d %c\n", output[output_char - 2], output[output_char - 2]);
-    fprintf(stderr, "3: %d %c\n", output[output_char - 3], output[output_char - 3]);
-    fprintf(stderr, "4: %d %c\n", output[output_char - 4], output[output_char - 4]);
-
-    if (no_comma)
-        praw("\t}"); /* end of snapshot */
-    else
-        praw("\t},"); /* end of snapshot more to come */
-}
-
 char* saved_section;
 char* saved_resource;
 long saved_level = 1;
@@ -298,6 +275,25 @@ void indent()
         praw("\t");
 }
 
+void parrayelement()
+{
+    DEBUG praw("SNAPSHOT");
+    praw("{\n"); /* start of snapshot */
+    saved_level++;
+}
+
+void parrayelementend(int no_comma)
+{
+    DEBUG praw("SNAPSHOTEND");
+    remove_ending_comma_if_any();
+    saved_level--;
+    indent();
+    if(no_comma)
+        praw("}"); /* end of snapshot */
+    else
+        praw("},"); /* end of snapshot more to come */
+}
+
 void psection(char* section)
 {
     buffer_check();
@@ -308,13 +304,12 @@ void psection(char* section)
     saved_level++;
 }
 
-void psnapshots()
+void parray(const char* arrayname)
 {
     buffer_check();
     precimon_sections++;
     indent();
-    output_char += sprintf(&output[output_char], "\"snapshots\": [");
-    saved_level++;
+    output_char += sprintf(&output[output_char], "\"%s\": [", arrayname);
 }
 
 void psub(char* resource)
@@ -346,11 +341,10 @@ void psectionend()
     praw("},\n");
 }
 
-void psnapshots_end()
+void parrayend()
 {
     saved_section = NULL;
     saved_resource = NULL;
-    saved_level--;
 
     if (output[output_char - 1] == ',') {
         output_char--;
@@ -2501,7 +2495,6 @@ void processes(double elapsed)
     int qindex = 0;
     int entry = 0;
     int max_sorted = 0;
-    char str[256];
     long cputime;
 #define pagesize (1024 * 4)
 
@@ -2541,13 +2534,12 @@ void processes(double elapsed)
     /* Even if we have no processes create a processors section + end
      * No proceses over the threadold is still valid JSON  - I hope.
      * */
-    psection("processes");
+    parray("processes");
     for (entry = 0; entry < max_sorted; entry++) {
         pindex = topper[entry].pindex;
         qindex = topper[entry].qindex;
 
-        sprintf(str, "process_%ld", (long)CURRENT(pi_pid));
-        psub(str);
+        parrayelement();
 
         /* Note to self: the directory owners /proc/PID is the process owner = worth adding */
         plong("pid", CURRENT(pi_pid));
@@ -2607,9 +2599,10 @@ void processes(double elapsed)
         plong("uid", CURRENT(uid));
         if (strlen(CURRENT(username)) > 0)
             pstring("username", CURRENT(username));
-        psubend();
+
+        parrayelementend(entry == max_sorted - 1);
     }
-    psectionend();
+    parrayend();
 }
 
 /* --- Top Processes End --- */
@@ -2940,7 +2933,7 @@ int main(int argc, char** argv)
     proc_cpuinfo();
     push();
 
-    psnapshots();
+    parray("snapshots");
     execute_end = nanomonotime();
 
 #define EXECUTE_TIME (execute_time = execute_end - execute_start)
@@ -2966,7 +2959,7 @@ int main(int argc, char** argv)
                 pulong("execute_time", execute_time);
                 psectionend();
             }
-            psnapshotend(loop == maxloops);
+            parrayelementend(loop == maxloops);
             push();
         }
 
@@ -2977,7 +2970,7 @@ int main(int argc, char** argv)
         DEBUG pulong("elapsed", sleep_time);
         DEBUG praw("Snapshot");
 
-        psnapshot();
+        parrayelement();
         snapshot_info(loop);
         proc_stat(sleep_time * 1e-9, PRINT_TRUE);
         read_data_number("meminfo");
@@ -3013,7 +3006,7 @@ int main(int argc, char** argv)
         }
     }
     /* finish-of */
-    psnapshots_end();
+    parrayend();
 
     if (precimon_stats)
         pstats();
