@@ -21,6 +21,8 @@
  */
 
 /* precimon_collector version needs to match the version in the precimon_collector.c */
+#define _GNU_SOURCE
+
 #define COLLECTOR_VERSION "12"
 
 /* precimon version */
@@ -29,32 +31,34 @@ char version[] = VERSION;
 char* command;
 
 #include <ctype.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include <mntent.h>
-#include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#include <dirent.h>
+#include <fcntl.h>
+#include <mntent.h>
+#include <pwd.h>
 #include <sys/errno.h>
 #include <sys/file.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <sys/vfs.h>
-#include <time.h>
 #include <unistd.h>
 
-#include <memory.h>
+#ifndef NOREMOTE
+#include <sys/socket.h>
+#include <net/if.h>
+#include <netinet/in.h>
+#endif
 
 #include <arpa/inet.h>
 #include <ifaddrs.h>
-#include <net/if.h>
 #include <netdb.h>
-#include <netinet/in.h>
 
 #define PRINT_FALSE 0
 #define PRINT_TRUE 1
@@ -84,10 +88,8 @@ char* nullstring = "";
 long level = 0;
 volatile sig_atomic_t interrupted = 0;
 
-#ifndef NOREMOTE
 char hostname[256] = { 0 };
 char shorthostname[256] = { 0 };
-#endif
 
 int sockfd = 1; /*default is stdout, only changed if we are using a remote socket */
 
@@ -115,9 +117,6 @@ int sockfd = 1; /*default is stdout, only changed if we are using a remote socke
 */
 
 #ifndef NOREMOTE
-/* below incldes are for socket handling */
-#include <arpa/inet.h>
-#include <netinet/in.h>
 
 void pexit(char* msg)
 {
@@ -393,7 +392,7 @@ void pstats()
     plong("long", precimon_long);
     plong("double", precimon_double);
     plong("hex", precimon_hex);
-    psectionend("precimon_stats");
+    psectionend();
 }
 
 void pstring(char* name, char* value)
@@ -717,7 +716,7 @@ void gpfs_data(double elapsed)
     if (gpfs_na)
         return;
 
-    records = gpfs_grab(&gpfs_io_curr, &gpfs_fs_curr);
+    records = gpfs_grab();
 
 #define DELTA_GPFS(xxx) ((double)(gpfs_io_curr.xxx - gpfs_io_prev.xxx) / elapsed)
 
@@ -1037,7 +1036,7 @@ void proc_stat(double elapsed, int print)
                     pdouble("steal", DELTA_LOGICAL(steal)); /* counter */
                     pdouble("guest", DELTA_LOGICAL(guest)); /* counter */
                     pdouble("guestnice", DELTA_LOGICAL(guestnice)); /* counter */
-                    psubend(0);
+                    psubend();
                 }
                 logical_cpu[cpuno].user = user;
                 logical_cpu[cpuno].nice = nice;
@@ -1242,7 +1241,7 @@ void proc_diskstats(double elapsed, int print)
                     pdouble("backlog", (current.dk_backlog - previous[i].dk_backlog) / elapsed);
                     pdouble("xfers", (current.dk_xfers - previous[i].dk_xfers) / elapsed);
                     plong("bsize", current.dk_bsize); /* this is fixed number & not a incremented number */
-                    psubend(0);
+                    psubend();
                 }
                 memcpy(&previous[i], &current, sizeof(struct diskinfo));
                 break; /* once found stop searching */
@@ -1363,7 +1362,7 @@ void proc_net_dev(double elapsed, int print)
 
                         pdouble("ocolls", (current.if_ocolls - previous[i].if_ocolls) / elapsed);
                         pdouble("ocarrier", (current.if_ocarrier - previous[i].if_ocarrier) / elapsed);
-                        psubend(0);
+                        psubend();
                     }
                     memcpy(&previous[i], &current, sizeof(struct netinfo));
                     break; /* once found stop searching */
@@ -1676,7 +1675,7 @@ void filesystems()
             plong("fs_files", vfs.f_files);
             plong("fs_files_free", vfs.f_ffree);
             plong("fs_namelength", vfs.f_namelen);
-            psubend(0);
+            psubend();
         }
     }
     psectionend();
@@ -1711,7 +1710,7 @@ void proc_cpuinfo()
         /* moronically cpuinfo file format has Tab characters !!! */
         if (!strncmp("processor", buf, strlen("processor"))) {
             if (processor != 0)
-                psubend(0);
+                psubend();
             sscanf(&buf[12], "%d", &int_val);
             sprintf(string, "proc%d", processor);
             psub(string);
@@ -1769,7 +1768,7 @@ void proc_cpuinfo()
         }
     }
     if (processor != 0)
-        psubend(0);
+        psubend();
     psectionend();
     if (ispower) {
         psection("cpuinfo_power");
@@ -1954,7 +1953,7 @@ void identity(char* command, char* version)
     pstring("shorthostname", shorthostname);
 
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC; /*either IPV4 or IPV6*/
+    hints.ai_family = AF_UNSPEC; /* either IPV4 or IPV6 */
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_CANONNAME;
 
@@ -2696,7 +2695,9 @@ int main(int argc, char** argv)
     FILE* fp;
     int print_child_pid = 0;
     int pid_file_fd;
+#ifndef NOREMOTE
     char datastring[256];
+#endif
     pid_t childpid;
     int proc_mode = 0;
     int timers_mode = 0;
