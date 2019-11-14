@@ -2690,7 +2690,6 @@ int main(int argc, char** argv)
     long long unsigned execute_time = 0;
     long long unsigned sleep_nanoseconds;
     long unsigned sleep_seconds;
-    int output_config = 0;
     int commlen;
     int i;
     int file_output = 0;
@@ -2707,6 +2706,14 @@ int main(int argc, char** argv)
     pid_t childpid;
     int proc_mode = 0;
     int timers_mode = 0;
+    int cpu_mode = 0;
+    int mem_mode = 0;
+    int disk_mode = 0;
+    int net_mode = 0;
+    int filesystem_mode = 0;
+    int lpar_mode = 0;
+    int gpfs_mode = 0;
+    int config_mode = 0;
 
     FUNCTION_START;
     pid_file_fd = lock_pid_file();
@@ -2726,7 +2733,7 @@ int main(int argc, char** argv)
 
     uid = getuid();
 
-    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:di:I:Pp:X:xCT"))) {
+    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:di:I:Pp:X:xCTUMDNLG"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -2774,10 +2781,31 @@ int main(int argc, char** argv)
             print_child_pid = 1;
             break;
         case 'C':
-            output_config = 1;
+            config_mode = 1;
             break;
         case 'T':
             timers_mode = 1;
+            break;
+        case 'U':
+            cpu_mode = 1;
+            break;
+        case 'M':
+            mem_mode = 1;
+            break;
+        case 'D':
+            disk_mode = 1;
+            break;
+        case 'N':
+            net_mode = 1;
+            break;
+        case 'F':
+            filesystem_mode = 1;
+            break;
+        case 'L':
+            lpar_mode = 1;
+            break;
+        case 'G':
+            gpfs_mode = 1;
             break;
         }
     }
@@ -2906,13 +2934,23 @@ int main(int argc, char** argv)
 
     execute_start = nanomonotime();
     /* seed incrementing counters */
-    proc_stat(0, PRINT_FALSE);
-    proc_diskstats(0, PRINT_FALSE);
-    proc_net_dev(0, PRINT_FALSE);
-    init_lparcfg();
-    sys_device_system_cpu(1.0, PRINT_FALSE);
+    if (cpu_mode)
+        proc_stat(0, PRINT_FALSE);
+
+    if (disk_mode)
+        proc_diskstats(0, PRINT_FALSE);
+
+    if (net_mode)
+        proc_net_dev(0, PRINT_FALSE);
+
+    if (lpar_mode) {
+        init_lparcfg();
+        sys_device_system_cpu(1.0, PRINT_FALSE);
+    }
 #ifndef NOGPFS
-    gpfs_init();
+    if(gpfs_mode) {
+        gpfs_init();
+    }
 #endif /* NOGPFS */
     if (proc_mode)
         processes_init();
@@ -2921,7 +2959,7 @@ int main(int argc, char** argv)
     pstart();
     identity(argv[0], VERSION);
 
-    if(output_config) {
+    if(config_mode) {
 #ifndef NOREMOTE
         config(debug, maxloops, seconds, proc_mode, hostmode, hostname, port, secret);
 #else
@@ -2950,6 +2988,7 @@ int main(int argc, char** argv)
     nanomonosleep(sleep_seconds, sleep_nanoseconds);
     sleep_end = nanomonotime();
     sleep_time = sleep_end - sleep_start;
+
     for (loop = 0; maxloops == -1 || loop <= maxloops; loop++) {
         execute_start = nanomonotime();
 
@@ -2974,17 +3013,32 @@ int main(int argc, char** argv)
 
         parrayelement();
         snapshot_info(loop);
-        proc_stat(sleep_time * 1e-9, PRINT_TRUE);
-        read_data_number("meminfo");
-        read_data_number("vmstat");
-        proc_diskstats(sleep_time * 1e-9, PRINT_TRUE);
-        proc_net_dev(sleep_time * 1e-9, PRINT_TRUE);
+        if (cpu_mode)
+            proc_stat(sleep_time * 1e-9, PRINT_TRUE);
+
+        if (mem_mode) {
+            read_data_number("meminfo");
+            read_data_number("vmstat");
+        }
+
+        if (disk_mode)
+            proc_diskstats(sleep_time * 1e-9, PRINT_TRUE);
+
+        if (net_mode)
+            proc_net_dev(sleep_time * 1e-9, PRINT_TRUE);
+
         proc_uptime();
-        filesystems();
-        read_lparcfg(sleep_time * 1e-9);
-        sys_device_system_cpu(sleep_time * 1e-9, PRINT_TRUE);
+
+        if (filesystem_mode)
+            filesystems();
+
+        if (lpar_mode) {
+            read_lparcfg(sleep_time * 1e-9);
+            sys_device_system_cpu(sleep_time * 1e-9, PRINT_TRUE);
+        }
 #ifndef NOGPFS
-        gpfs_data(sleep_time * 1e-9);
+        if (gpfs_mode)
+            gpfs_data(sleep_time * 1e-9);
 #endif /* NOGPFS */
         if (proc_mode)
             processes(sleep_time * 1e-9);

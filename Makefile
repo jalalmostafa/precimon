@@ -19,4 +19,4 @@ clean:
 	rm -f $(TARGET) $(TARGET_COLLECTOR)
 
 cleanall: clean
-	rm -f *.o
+	rm -f *.o *.json *.err

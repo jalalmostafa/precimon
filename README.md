@@ -16,6 +16,13 @@ The tool samples `/proc` every N seconds then prints them to stdout or selected 
 - `-I percent`   : Set ignore process percent threshold (default 0.01%)
 - `-C`           : Output precimon configuration to the JSON file
 - `-T`           : Output snapshot timers e.g. sleep time, execution time
+- `-U`           : CPU stats
+- `-M`           : Memory and Virtual Memory Stats
+- `-D`           : Disk I/O Stats per disk device
+- `-N`           : Network device status and information
+- `-F`           : Mounted File Systems Information
+- `-L`           : IBM Power LPAR Data
+- `-G`           : Global File System Stats
 
 Examples:
 
