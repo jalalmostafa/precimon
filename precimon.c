@@ -2593,9 +2593,11 @@ void processes(double elapsed)
         plong("swap_pages", CURRENT(pi_swap_pages));
         plong("child_swap_pages", CURRENT(pi_child_swap_pages));
         plong("last_cpu", CURRENT(pi_last_cpu));
+#ifndef PRE_KERNEL_2_6_18
         plong("realtime_priority", CURRENT(pi_realtime_priority));
         plong("sched_policy", CURRENT(pi_sched_policy));
         pdouble("delayacct_blkio_secs", (double)CURRENT(pi_delayacct_blkio_ticks) / (double)sysconf(_SC_CLK_TCK));
+#endif
         plong("uid", CURRENT(uid));
         if (strlen(CURRENT(username)) > 0)
             pstring("username", CURRENT(username));
