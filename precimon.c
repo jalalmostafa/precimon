@@ -2627,19 +2627,25 @@ void hint(char* program, char* version)
     printf("\t-f         : Output to file (not stdout) to two files below\n");
     printf("\t           : Data:  hostname_<year><month><day>_<hour><minutes>.json\n");
     printf("\t           : Error: hostname_<year><month><day>_<hour><minutes>.err\n");
-    printf("\t-P         : Add process stats (take CPU cycles and large stats volume)\n");
-    printf("\t-I percent : Set ignore process percent threshold (default 0.01%%)\n");
-    printf("\t-? or -h   : This output and stop\n");
     printf("\t-d         : Switch on debugging\n");
-    printf("\t-C         : Output precimon configuration to the JSON file\n");
-    printf("\t-T         : Output snapshot timers e.g. sleep time, execution time\n");
+    printf("\t-? or -h   : This output and stop\n");
 #ifndef NOREMOTE
     printf("Push data to collector: add -h hostname -p port\n");
     printf("\t-i ip      : IP address or hostname of the precimon central collector\n");
     printf("\t-p port    : port number on collector host\n");
     printf("\t-X secret  : Set the remote collector secret or use shell PRECIMON_SECRET\n");
 #endif /* NOREMOTE */
-
+    printf("\t-P         : Add process stats (take CPU cycles and large stats volume)\n");
+    printf("\t-I percent : Set ignore process percent threshold (default 0.01%%)\n");
+    printf("\t-C         : Output precimon configuration to the JSON file\n");
+    printf("\t-T         : Output snapshot timers e.g. sleep time, execution time\n");
+    printf("\t-U         : CPU stats\n");
+    printf("\t-M         : Memory and Virtual Memory Stats\n");
+    printf("\t-D         : Disk I/O Stats per disk device\n");
+    printf("\t-N         : Network device status and information\n");
+    printf("\t-F         : Mounted File Systems Information\n");
+    printf("\t-L         : IBM Power LPAR Data\n");
+    printf("\t-G         : Global File System Stats\n");
     printf("\n");
     printf("Examples:\n");
     printf("    1 Every 5 mins all day\n");
