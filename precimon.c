@@ -288,7 +288,7 @@ void parrayelementend(int no_comma)
     remove_ending_comma_if_any();
     saved_level--;
     indent();
-    if(no_comma)
+    if (no_comma)
         praw("}"); /* end of snapshot */
     else
         praw("},"); /* end of snapshot more to come */
@@ -500,6 +500,311 @@ void snapshot_info(long loop)
     plong("snapshot_loop", loop);
     pulong("taken_at", nanomonotime());
     psectionend();
+}
+
+#define NFS_V2_NAMES_COUNT 18
+char *nfs_v2_names[NFS_V2_NAMES_COUNT] = {
+    "null", "getattr", "setattr", "root", "lookup", "readlink",
+    "read", "wrcache", "write", "create", "remove", "rename",
+    "link", "symlink", "mkdir", "rmdir", "readdir", "fsstat"
+};
+
+#define NFS_V3_NAMES_COUNT 22
+char *nfs_v3_names[22] = {
+    "null", "getattr", "setattr", "lookup", "access", "readlink",
+    "read", "write", "create", "mkdir", "symlink", "mknod",
+    "remove", "rmdir", "rename", "link", "readdir", "readdirplus",
+    "fsstat", "fsinfo", "pathconf", "commit"
+};
+
+#define NFS_V4S_NAMES_COUNT 59
+char *nfs_v4s_names[NFS_V4S_NAMES_COUNT] = {	/* get these names from nfsstat as they are NOT documented */
+    "op0-unused", "op1-unused", "op2-future", "access", "close", "commit",/* 1 - 6 */
+    "create", "delegpurge", "delegreturn", "getattr", "getfh", "link",	/* 7 - 12 */
+    "lock", "lockt", "locku", "lookup", "lookup_root", "nverify",	/* 13 - 18 */
+    "open", "openattr", "open_conf", "open_dgrd", "putfh", "putpubfh",	/* 19 - 24 */
+    "putrootfh", "read", "readdir", "readlink", "remove", "rename",	/* 25 - 30 */
+    "renew", "restorefh", "savefh", "secinfo", "setattr", "setcltid",	/* 31 - 36 */
+    "setcltidconf", "verify", "write", "rellockowner", "bc_ctl", "blind_conn",	/* 37 - 42 */
+    "exchange_id", "create_ses", "destroy_ses", "free_statid", "getdirdelag", "getdevinfo",/* 43 - 48 */
+    "getdevlist", "layoutcommit", "layoutget", "layoutreturn", "secunfononam", "sequence", /* 49 - 54 */
+    "set_ssv", "test_stateid", "want_deleg", "destory_clid", "reclaim_comp" 	/* 55 - 59 */
+};
+
+#define NFS_V4C_NAMES_COUNT 48
+char *nfs_v4c_names[NFS_V4C_NAMES_COUNT] = {	/* get these names from nfsstat as they are NOT documented */
+    "null", "read", "write", "commit", "open", "open_conf",	/* 1 - 6 */
+    "open_noat", "open_dgrd", "close", "setattr", "fsinfo", "renew",	/* 7 - 12 */
+    "setclntid", "confirm", "lock", "lockt", "locku", "access",	/* 13 - 18 */
+    "getattr", "lookup", "lookup_root", "remove", "rename", "link",	/* 19 - 24 */
+    "symlink", "create", "pathconf", "statfs", "readlink", "readdir",	/* 25 - 30 */
+    "server_caps", "delegreturn", "getacl", "setacl", "fs_locations", "rel_lkowner",	/* 31 - 36 */
+    "secinfo", "exchange_id", "create_ses", "destroy_ses", "sequence", "get_lease_t",	/* 37 - 42 */
+    "reclaim_comp", "layoutget", "getdevinfo", "layoutcommit", "layoutreturn", "getdevlist"	/* 43 - 48 */
+};
+
+/* NFS data structures */
+struct nfs_stat {
+    long long  v2c[NFS_V2_NAMES_COUNT];	/* version 2 client */
+    long long  v3c[NFS_V3_NAMES_COUNT];	/* version 3 client */
+    long long  v4c[NFS_V4C_NAMES_COUNT];/* version 4 client */
+
+    long long  v2s[NFS_V2_NAMES_COUNT];	/* version 2 SERVER */
+    long long  v3s[NFS_V3_NAMES_COUNT];	/* version 3 SERVER */
+    long long  v4s[NFS_V4S_NAMES_COUNT];/* version 4 SERVER */
+} nfsa, nfsb;
+
+/* pointers to the above */
+struct nfs_stat *nfsp = &nfsa;
+struct nfs_stat *nfsq = &nfsb;
+
+/* files with the NFS data */
+char *nfs_filename  = "/proc/net/rpc/nfs";
+char *nfsd_filename = "/proc/net/rpc/nfsd";
+
+/* open flie pointers */
+FILE *nfs_fp  = NULL;
+FILE *nfsd_fp = NULL;
+
+void nfs_getdata()
+{
+    int i;
+    int j;
+    int len;
+    int lineno;
+    char buffer[4096];
+    struct nfs_stat *temp;
+    int ret;
+
+    /* swap pointers */
+    temp = nfsp;
+    nfsp = nfsq;
+    nfsq = temp;
+
+    /* sample /proc/net/rpc/nfs
+    net 0 0 0 0
+    rpc 70137 0 0
+    proc2 18 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    proc3 22 0 27364 0 32 828 22 40668 0 1 0 0 0 0 0 0 0 0 1212 6 2 1 0
+    proc4 2 5 196
+    */
+    if ((nfs_fp = fopen(nfs_filename, "r")) != NULL) {
+        for (lineno = 0; fgets(buffer, 4095, nfs_fp) != NULL; lineno++) {
+            buffer[strlen(buffer) -1] = 0; /* ditch end of line  newline */
+            DEBUG printf("get data client line=%d \"%s\"\n",lineno, buffer);
+
+            if (!strncmp("proc2 ", buffer, 6)) {
+                DEBUG printf("client proc2 found\n");
+                /* client version 2 line readers "proc2 18 num num etc" */
+                len = strlen(buffer);
+                for (j = 0, i = 8; i < len && j < NFS_V2_NAMES_COUNT; i++) {
+                    if (buffer[i] == ' ') {
+                        nfsp->v2c[j] = 0;
+                        nfsp->v2c[j] = atoll(&buffer[i + 1]);
+                        DEBUG printf("client proc2 j=%d value=%lld\n",j, nfsp->v2c[j]);
+                        j++;
+                    }
+                }
+            }
+
+            if (!strncmp("proc3 ", buffer, 6)) {
+                DEBUG printf("client proc3 found\n");
+                /* client version 3 line readers "proc3 22 num num etc" */
+                len = strlen(buffer);
+                for (j = 0, i = 8; i < len && j < NFS_V3_NAMES_COUNT; i++) {
+                    if (buffer[i] == ' ') {
+                        nfsp->v3c[j] = 0;
+                        nfsp->v3c[j] = atoll(&buffer[i + 1]);
+                        DEBUG printf("client proc3 j=%d value=%lld\n",j, nfsp->v3c[j]);
+                        j++;
+                    }
+                }
+            }
+
+            if (!strncmp("proc4 ", buffer, 6)) {
+                DEBUG printf("client proc4 found\n");
+                /* client version 4 line readers "proc4 35 num num etc" */
+                len = strlen(buffer);
+                for (j = 0, i = 8; i < len && j < NFS_V4C_NAMES_COUNT; i++) {
+                    if (buffer[i] == ' ') {
+                        nfsp->v4c[j] = 0;
+                        nfsp->v4c[j] = atoll(&buffer[i + 1]);
+                        DEBUG printf("client proc4 j=%d value=%lld\n",j, nfsp->v4c[j]);
+                        j++;
+                    }
+                }
+            }
+        }
+        ret = fclose(nfs_fp);
+        if (ret != 0)
+            DEBUG printf("fclose(nfs_fp)=%d errno=%d\n", ret,errno);
+        
+    } else { /* zero all the client counters */
+        for (j = 0; j < NFS_V2_NAMES_COUNT; j++) {
+            nfsp->v2c[j] = 0;
+            nfsq->v2c[j] = 0;
+        }
+
+        for (j = 0; j < NFS_V3_NAMES_COUNT; j++) {
+            nfsp->v3c[j] = 0;
+            nfsq->v3c[j] = 0;
+        }
+
+        for (j = 0; j < NFS_V4C_NAMES_COUNT; j++) {
+            nfsp->v4c[j] = 0;
+            nfsq->v4c[j] = 0;
+        }
+    }
+    /* sample /proc/net/rpc/nfsd 
+    rc 0 0 0
+    fh 0 0 0 0 0
+    io 0 0
+    th 4 0 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000 0.000
+    ra 32 0 0 0 0 0 0 0 0 0 0 0
+    net 0 0 0 0
+    rpc 0 0 0 0 0
+    proc2 18 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    proc3 22 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    proc4 2 0 0
+    proc4ops 72 0 0 0 30 0 0 0 0 0 97 4 0 0 0 0 3 0 0 0 0 0 0 125 0 2 0 29 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 2 1 0 0 0 0 0 0 0 0 1 193 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0
+    */
+    if ((nfsd_fp = fopen(nfsd_filename, "r")) != NULL) {
+        for (lineno = 0; fgets(buffer, 4095, nfsd_fp) != NULL; lineno++) {
+            buffer[strlen(buffer) -1] = 0; /* ditch end of line  newline */
+            DEBUG printf("get data server line=%d \"%s\"\n",lineno, buffer);
+
+            if (!strncmp("proc2 ", buffer, 6)) {
+                DEBUG printf("server proc2 found\n");
+                /* server version 2 line readers "proc2 18 num num etc" */
+                len = strlen(buffer);
+                for (j = 0, i = 8; i < len && j < NFS_V2_NAMES_COUNT; i++) {
+                    if (buffer[i] == ' ') {
+                    nfsp->v2s[j] = 0;
+                    nfsp->v2s[j] = atoll(&buffer[i + 1]);
+                    DEBUG printf("server proc2 j=%d value=%lld\n", j, nfsp->v2s[j]);
+                    j++;
+                    }
+                }
+            }
+
+            if (!strncmp("proc3 ", buffer, 6)) {
+                DEBUG printf("server proc3 found\n");
+                /* server version 3 line readers "proc3 22 num num etc" 
+                                                01234567890 so 8 for the first number */
+                len = strlen(buffer);
+                for (j = 0, i = 8; i < len && j < NFS_V2_NAMES_COUNT; i++) {
+                    if (buffer[i] == ' ') {
+                    nfsp->v3s[j] = 0;
+                    nfsp->v3s[j] = atoll(&buffer[i + 1]);
+                    DEBUG printf("server proc3 j=%d value=%lld\n", j, nfsp->v3s[j]);
+                    j++;
+                    }
+                }
+            }
+
+            if (!strncmp("proc4ops ", buffer, 9)) {
+                DEBUG printf("server proc4ops found\n");
+                /* server version 4 line readers "proc4ops 40 num num etc"  
+                                                012345678901
+                NOTE: the "ops" hence starting in column 9 for the number of stats and 11 for the first stat */
+                len = strlen(buffer);
+                for (j = 0, i = 11; i < len && j < NFS_V4S_NAMES_COUNT; i++) {
+                    if (buffer[i] == ' ') {
+                    nfsp->v4s[j] = 0;
+                    nfsp->v4s[j] = atoll(&buffer[i + 1]);
+                        DEBUG printf("server proc4 j=%d value=%lld\n",j, nfsp->v4s[j]);
+                    j++;
+                    }
+                }
+            }
+        }
+        ret = fclose(nfsd_fp);
+        if (ret != 0)
+            DEBUG printf("fclose(nfsd_fp)=%d errno=%d\n", ret,errno);
+    } else { /* zero all the server counters */
+        for (j = 0; j < NFS_V2_NAMES_COUNT; j++) {
+            nfsp->v2s[j] = 0;
+            nfsq->v2s[j] = 0;
+        }
+        for (j = 0; j < NFS_V3_NAMES_COUNT; j++) {
+            nfsp->v3s[j] = 0;
+            nfsq->v3s[j] = 0;
+        }
+        for (j = 0; j < NFS_V4S_NAMES_COUNT; j++) {
+            nfsp->v4s[j] = 0;
+            nfsq->v4s[j] = 0;
+        }
+    }
+}
+
+void nfs_init()
+{
+    nfs_getdata();
+    memcpy(nfsq, nfsp, (size_t)sizeof(struct nfs_stat));
+}
+
+void nfs(double elapsed)
+{
+    int i;
+    long long total;
+
+    nfs_getdata();
+    /* Note: ignoring the first odd stat as this can have a low number and the rest be all zero */
+    for (total = 0, i = 1; i < NFS_V2_NAMES_COUNT; i++)
+        total += nfsp->v2c[i];
+    if (total > 100) {
+        psection("NFS2client");
+        for (i = 0; i < NFS_V2_NAMES_COUNT; i++) {
+            pdouble(nfs_v2_names[i], ((double)(nfsp->v2c[i] - nfsq->v2c[i])) / elapsed);
+        }
+        psectionend();
+    }
+    for (total = 0, i = 1; i < NFS_V2_NAMES_COUNT; i++)
+        total += nfsp->v2s[i];
+    if (total > 100) {
+        psection("NFS2server");
+        for (i = 0; i < NFS_V2_NAMES_COUNT; i++) {
+            pdouble(nfs_v2_names[i], ((double)(nfsp->v2s[i] - nfsq->v2s[i])) / elapsed);
+        }
+        psectionend();
+            
+    }
+    for (total = 0, i = 1; i < NFS_V3_NAMES_COUNT; i++)
+        total += nfsp->v3c[i];
+    if (total > 100) {
+        psection("NFS3client");
+        for (i = 0; i < NFS_V3_NAMES_COUNT; i++) {
+            pdouble(nfs_v3_names[i], ((double)(nfsp->v3c[i] - nfsq->v3c[i])) / elapsed);
+        }
+        psectionend();
+    }
+    for (total = 0, i = 1; i < NFS_V3_NAMES_COUNT; i++)
+        total += nfsp->v3s[i];
+    if (total > 100) {
+        psection("NFS3server");
+        for (i = 0; i < NFS_V3_NAMES_COUNT; i++) {
+            pdouble(nfs_v3_names[i], ((double)(nfsp->v3s[i] - nfsq->v3s[i])) / elapsed);
+        }
+        psectionend();
+    }
+    for (total = 0, i = 1; i < NFS_V4C_NAMES_COUNT; i++)
+        total += nfsp->v4c[i];
+    if (total > 100) {
+        psection("NFS4client");
+        for (i = 0; i < NFS_V4C_NAMES_COUNT; i++) {
+            pdouble(nfs_v4c_names[i], ((double)(nfsp->v4c[i] - nfsq->v4c[i])) / elapsed);
+        }
+        psectionend();
+    }
+    for (total = 0, i = 1; i < NFS_V4S_NAMES_COUNT; i++)
+        total += nfsp->v4s[i];
+    if (total > 100) {
+        psection("NFS4server");
+        for (i = 0; i < NFS_V4S_NAMES_COUNT; i++) {
+            pdouble(nfs_v4s_names[i], ((double)(nfsp->v4s[i] - nfsq->v4s[i])) / elapsed); 
+        }
+        psectionend();
+    }
 }
 
 /* - - - - - gpfs - - - - */
@@ -1141,8 +1446,8 @@ void proc_diskstats(double elapsed, int print)
         if (pop != NULL) {
             /* throw away the headerline */
             tmpstr[0] = 0;
-            if(fgets(tmpstr, 127, pop) != NULL){
-                for(disks = 0;; disks++) {
+            if (fgets(tmpstr, 127, pop) != NULL){
+                for (disks = 0;; disks++) {
                     tmpstr[0] = 0;
                     if (fgets(tmpstr, 127, pop) == NULL)
                         break;
@@ -1157,10 +1462,10 @@ void proc_diskstats(double elapsed, int print)
         pop = popen("lsblk --nodeps --output NAME,TYPE --raw 2>/dev/null", "r");
         if (pop != NULL) {
             /* throw away the headerline */
-            if(fgets(tmpstr, 70, pop) != NULL) {
-                for(i = 0; i < disks; i++) {
+            if (fgets(tmpstr, 70, pop) != NULL) {
+                for (i = 0; i < disks; i++) {
                     tmpstr[0] = 0;
-                    if(fgets(tmpstr, 70, pop) == NULL)
+                    if (fgets(tmpstr, 70, pop) == NULL)
                         break;
                     tmpstr[strlen(tmpstr)] = 0; /* remove NL char */
                     len = strlen(tmpstr);
@@ -2073,7 +2378,7 @@ void do_lock(int fd) {
     } else {
         sprintf(buffer, "%d \n", getpid());
         buffer[31] = 0;
-        if(write(fd, buffer, strlen(buffer)) < 0)
+        if (write(fd, buffer, strlen(buffer)) < 0)
             pexit("Cannot acquire lock");
     }
 }
@@ -2696,6 +3001,7 @@ int main(int argc, char** argv)
     long long unsigned execute_time = 0;
     long long unsigned sleep_nanoseconds;
     long unsigned sleep_seconds;
+    double elapsed;
     int commlen;
     int i;
     int file_output = 0;
@@ -2946,15 +3252,17 @@ int main(int argc, char** argv)
     if (disk_mode)
         proc_diskstats(0, PRINT_FALSE);
 
-    if (net_mode)
+    if (net_mode) {
         proc_net_dev(0, PRINT_FALSE);
+        nfs_init();
+    }
 
     if (lpar_mode) {
         init_lparcfg();
         sys_device_system_cpu(1.0, PRINT_FALSE);
     }
 #ifndef NOGPFS
-    if(gpfs_mode) {
+    if (gpfs_mode) {
         gpfs_init();
     }
 #endif /* NOGPFS */
@@ -2965,7 +3273,7 @@ int main(int argc, char** argv)
     pstart();
     identity(argv[0], VERSION);
 
-    if(config_mode) {
+    if (config_mode) {
 #ifndef NOREMOTE
         config(debug, maxloops, seconds, proc_mode, hostmode, hostname, port, secret);
 #else
@@ -2998,8 +3306,8 @@ int main(int argc, char** argv)
     for (loop = 0; maxloops == -1 || loop <= maxloops; loop++) {
         execute_start = nanomonotime();
 
-        if(loop != 0) {
-            if(timers_mode) {
+        if (loop != 0) {
+            if (timers_mode) {
                 psection("timers");
                 pulong("decided_sleep_time", sleep_seconds * 1e9 + sleep_nanoseconds);
                 pulong("actual_sleep_time", sleep_time);
@@ -3017,10 +3325,12 @@ int main(int argc, char** argv)
         DEBUG pulong("elapsed", sleep_time);
         DEBUG praw("Snapshot");
 
+        elapsed = sleep_time * 1e-9;
+
         parrayelement();
         snapshot_info(loop);
         if (cpu_mode)
-            proc_stat(sleep_time * 1e-9, PRINT_TRUE);
+            proc_stat(elapsed, PRINT_TRUE);
 
         if (mem_mode) {
             read_data_number("meminfo");
@@ -3028,10 +3338,12 @@ int main(int argc, char** argv)
         }
 
         if (disk_mode)
-            proc_diskstats(sleep_time * 1e-9, PRINT_TRUE);
+            proc_diskstats(elapsed, PRINT_TRUE);
 
-        if (net_mode)
-            proc_net_dev(sleep_time * 1e-9, PRINT_TRUE);
+        if (net_mode) {
+            proc_net_dev(elapsed, PRINT_TRUE);
+            nfs(elapsed);
+        }
 
         proc_uptime();
 
@@ -3039,15 +3351,15 @@ int main(int argc, char** argv)
             filesystems();
 
         if (lpar_mode) {
-            read_lparcfg(sleep_time * 1e-9);
-            sys_device_system_cpu(sleep_time * 1e-9, PRINT_TRUE);
+            read_lparcfg(elapsed);
+            sys_device_system_cpu(elapsed, PRINT_TRUE);
         }
 #ifndef NOGPFS
         if (gpfs_mode)
-            gpfs_data(sleep_time * 1e-9);
+            gpfs_data(elapsed);
 #endif /* NOGPFS */
         if (proc_mode)
-            processes(sleep_time * 1e-9);
+            processes(elapsed);
 
         if (interrupted) {
             fprintf(stderr, "signal=%d received at loop=%lld, breaking and exiting gracefully...\n", interrupted, loop);
