@@ -49,6 +49,7 @@ char* command;
 #include <sys/utsname.h>
 #include <sys/vfs.h>
 #include <unistd.h>
+#include <linux/version.h>
 
 #ifndef NOREMOTE
 #include <sys/socket.h>
@@ -433,7 +434,11 @@ struct tm* tim; /* used to work out the local hour/min/second */
 
 long long unsigned nanomonotime() {
     struct timespec tspec;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28)
     clock_gettime(CLOCK_MONOTONIC, &tspec);
+#else
+    clock_gettime(CLOCK_MONOTONIC_RAW, &tspec);
+#endif
     return tspec.tv_sec * 1e9 + tspec.tv_nsec;
 }
 
@@ -2459,7 +2464,7 @@ struct procsinfo {
     long pi_child_stime;
     long pi_priority;
     long pi_nice;
-#ifdef PRE_KERNEL_2_6_18
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 16, 18)
     long junk /* removed */;
 #else
     long pi_num_threads;
@@ -2484,7 +2489,7 @@ struct procsinfo {
     unsigned long pi_child_swap_pages;
     int pi_signal_exit;
     int pi_last_cpu;
-#ifndef PRE_KERNEL_2_6_18
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 16, 18)
     unsigned long pi_realtime_priority;
     unsigned long pi_sched_policy;
     unsigned long long pi_delayacct_blkio_ticks;
@@ -2587,7 +2592,7 @@ int proc_procsinfo(int pid, int index)
     count++;
 
     ret = sscanf(&buf[count],
-#ifdef PRE_KERNEL_2_6_18
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 16, 18)
         "%c %d %d %d %d %d %lu %lu %lu %lu %lu %lu %lu %ld %ld %ld %ld %ld %ld %lu %lu %ld %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %d %d",
 #else
         /*                 1  2  3  4  5  6  7   8   9   10  11  12  13  14  15  16  17  18  19  20  21  22  23  24  25  26  27  28  29  30  31  32  33  34  35 36 37  38  39  40 */
@@ -2611,7 +2616,7 @@ int proc_procsinfo(int pid, int index)
         &p->procs[index].pi_child_stime, /*18*/
         &p->procs[index].pi_priority, /*19*/
         &p->procs[index].pi_nice, /*20*/
-#ifdef PRE_KERNEL_2_6_18
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 16, 18)
         &p->procs[index].junk, /*21*/
 #else
         &p->procs[index].pi_num_threads, /*21*/
@@ -2635,14 +2640,14 @@ int proc_procsinfo(int pid, int index)
         &p->procs[index].pi_child_swap_pages, /*37*/
         &p->procs[index].pi_signal_exit, /*38*/
         &p->procs[index].pi_last_cpu /*39*/
-#ifndef PRE_KERNEL_2_6_18
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2, 16, 18)
         ,
         &p->procs[index].pi_realtime_priority, /*40*/
         &p->procs[index].pi_sched_policy, /*41*/
         &p->procs[index].pi_delayacct_blkio_ticks /*42*/
 #endif
     );
-#ifdef PRE_KERNEL_2_6_18
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(2, 16, 18)
     if (ret != 37) {
         fprintf(stderr,
             "procsinfo2 sscanf wanted 37 returned = %d pid=%d line=%s\n", ret, pid, buf);
