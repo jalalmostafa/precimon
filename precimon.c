@@ -39,6 +39,7 @@ char* command;
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <linux/version.h>
 #include <mntent.h>
 #include <pwd.h>
 #include <sys/errno.h>
@@ -49,12 +50,11 @@ char* command;
 #include <sys/utsname.h>
 #include <sys/vfs.h>
 #include <unistd.h>
-#include <linux/version.h>
 
 #ifndef NOREMOTE
-#include <sys/socket.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
 #endif
 
 #include <arpa/inet.h>
@@ -190,13 +190,13 @@ void create_socket(char* ip_address, long port, char* hostname, char* utc, char*
     hostsockaddr.sin_family = AF_INET;
     hostsockaddr.sin_port = htons(port);
 
-    if (inet_pton(AF_INET, ip_address, &hostsockaddr.sin_addr) <= 0){
+    if (inet_pton(AF_INET, ip_address, &hostsockaddr.sin_addr) <= 0) {
         printf("hostname=%s is not valid\n", ip_address);
         exit(55);
     }
 
     if (connect(sockfd, (struct sockaddr*)&hostsockaddr, sizeof(hostsockaddr)) < 0)
-            pexit("precimon: connect() call failed");
+        pexit("precimon: connect() call failed");
 
     sprintf(buffer, "preamble-here precimon %s %s %s %s postamble-here",
         hostname, utc, secretstr, COLLECTOR_VERSION);
@@ -432,7 +432,8 @@ int error(char* buf)
 time_t timer; /* used to work out the time details*/
 struct tm* tim; /* used to work out the local hour/min/second */
 
-long long unsigned nanomonotime() {
+long long unsigned nanomonotime()
+{
     struct timespec tspec;
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28)
     clock_gettime(CLOCK_MONOTONIC, &tspec);
@@ -442,7 +443,8 @@ long long unsigned nanomonotime() {
     return tspec.tv_sec * 1e9 + tspec.tv_nsec;
 }
 
-void nanomonosleep(long sec, long nsec) {
+void nanomonosleep(long sec, long nsec)
+{
     struct timespec tspec;
     long sum;
     clock_gettime(CLOCK_MONOTONIC, &tspec);
@@ -508,14 +510,14 @@ void snapshot_info(long loop)
 }
 
 #define NFS_V2_NAMES_COUNT 18
-char *nfs_v2_names[NFS_V2_NAMES_COUNT] = {
+char* nfs_v2_names[NFS_V2_NAMES_COUNT] = {
     "null", "getattr", "setattr", "root", "lookup", "readlink",
     "read", "wrcache", "write", "create", "remove", "rename",
     "link", "symlink", "mkdir", "rmdir", "readdir", "fsstat"
 };
 
 #define NFS_V3_NAMES_COUNT 22
-char *nfs_v3_names[22] = {
+char* nfs_v3_names[22] = {
     "null", "getattr", "setattr", "lookup", "access", "readlink",
     "read", "write", "create", "mkdir", "symlink", "mknod",
     "remove", "rmdir", "rename", "link", "readdir", "readdirplus",
@@ -523,53 +525,55 @@ char *nfs_v3_names[22] = {
 };
 
 #define NFS_V4S_NAMES_COUNT 59
-char *nfs_v4s_names[NFS_V4S_NAMES_COUNT] = {	/* get these names from nfsstat as they are NOT documented */
-    "op0-unused", "op1-unused", "op2-future", "access", "close", "commit",/* 1 - 6 */
-    "create", "delegpurge", "delegreturn", "getattr", "getfh", "link",	/* 7 - 12 */
-    "lock", "lockt", "locku", "lookup", "lookup_root", "nverify",	/* 13 - 18 */
-    "open", "openattr", "open_conf", "open_dgrd", "putfh", "putpubfh",	/* 19 - 24 */
-    "putrootfh", "read", "readdir", "readlink", "remove", "rename",	/* 25 - 30 */
-    "renew", "restorefh", "savefh", "secinfo", "setattr", "setcltid",	/* 31 - 36 */
-    "setcltidconf", "verify", "write", "rellockowner", "bc_ctl", "blind_conn",	/* 37 - 42 */
-    "exchange_id", "create_ses", "destroy_ses", "free_statid", "getdirdelag", "getdevinfo",/* 43 - 48 */
+char* nfs_v4s_names[NFS_V4S_NAMES_COUNT] = {
+    /* get these names from nfsstat as they are NOT documented */
+    "op0-unused", "op1-unused", "op2-future", "access", "close", "commit", /* 1 - 6 */
+    "create", "delegpurge", "delegreturn", "getattr", "getfh", "link", /* 7 - 12 */
+    "lock", "lockt", "locku", "lookup", "lookup_root", "nverify", /* 13 - 18 */
+    "open", "openattr", "open_conf", "open_dgrd", "putfh", "putpubfh", /* 19 - 24 */
+    "putrootfh", "read", "readdir", "readlink", "remove", "rename", /* 25 - 30 */
+    "renew", "restorefh", "savefh", "secinfo", "setattr", "setcltid", /* 31 - 36 */
+    "setcltidconf", "verify", "write", "rellockowner", "bc_ctl", "blind_conn", /* 37 - 42 */
+    "exchange_id", "create_ses", "destroy_ses", "free_statid", "getdirdelag", "getdevinfo", /* 43 - 48 */
     "getdevlist", "layoutcommit", "layoutget", "layoutreturn", "secunfononam", "sequence", /* 49 - 54 */
-    "set_ssv", "test_stateid", "want_deleg", "destory_clid", "reclaim_comp" 	/* 55 - 59 */
+    "set_ssv", "test_stateid", "want_deleg", "destory_clid", "reclaim_comp" /* 55 - 59 */
 };
 
 #define NFS_V4C_NAMES_COUNT 48
-char *nfs_v4c_names[NFS_V4C_NAMES_COUNT] = {	/* get these names from nfsstat as they are NOT documented */
-    "null", "read", "write", "commit", "open", "open_conf",	/* 1 - 6 */
-    "open_noat", "open_dgrd", "close", "setattr", "fsinfo", "renew",	/* 7 - 12 */
-    "setclntid", "confirm", "lock", "lockt", "locku", "access",	/* 13 - 18 */
-    "getattr", "lookup", "lookup_root", "remove", "rename", "link",	/* 19 - 24 */
-    "symlink", "create", "pathconf", "statfs", "readlink", "readdir",	/* 25 - 30 */
-    "server_caps", "delegreturn", "getacl", "setacl", "fs_locations", "rel_lkowner",	/* 31 - 36 */
-    "secinfo", "exchange_id", "create_ses", "destroy_ses", "sequence", "get_lease_t",	/* 37 - 42 */
-    "reclaim_comp", "layoutget", "getdevinfo", "layoutcommit", "layoutreturn", "getdevlist"	/* 43 - 48 */
+char* nfs_v4c_names[NFS_V4C_NAMES_COUNT] = {
+    /* get these names from nfsstat as they are NOT documented */
+    "null", "read", "write", "commit", "open", "open_conf", /* 1 - 6 */
+    "open_noat", "open_dgrd", "close", "setattr", "fsinfo", "renew", /* 7 - 12 */
+    "setclntid", "confirm", "lock", "lockt", "locku", "access", /* 13 - 18 */
+    "getattr", "lookup", "lookup_root", "remove", "rename", "link", /* 19 - 24 */
+    "symlink", "create", "pathconf", "statfs", "readlink", "readdir", /* 25 - 30 */
+    "server_caps", "delegreturn", "getacl", "setacl", "fs_locations", "rel_lkowner", /* 31 - 36 */
+    "secinfo", "exchange_id", "create_ses", "destroy_ses", "sequence", "get_lease_t", /* 37 - 42 */
+    "reclaim_comp", "layoutget", "getdevinfo", "layoutcommit", "layoutreturn", "getdevlist" /* 43 - 48 */
 };
 
 /* NFS data structures */
 struct nfs_stat {
-    long long  v2c[NFS_V2_NAMES_COUNT];	/* version 2 client */
-    long long  v3c[NFS_V3_NAMES_COUNT];	/* version 3 client */
-    long long  v4c[NFS_V4C_NAMES_COUNT];/* version 4 client */
+    long long v2c[NFS_V2_NAMES_COUNT]; /* version 2 client */
+    long long v3c[NFS_V3_NAMES_COUNT]; /* version 3 client */
+    long long v4c[NFS_V4C_NAMES_COUNT]; /* version 4 client */
 
-    long long  v2s[NFS_V2_NAMES_COUNT];	/* version 2 SERVER */
-    long long  v3s[NFS_V3_NAMES_COUNT];	/* version 3 SERVER */
-    long long  v4s[NFS_V4S_NAMES_COUNT];/* version 4 SERVER */
+    long long v2s[NFS_V2_NAMES_COUNT]; /* version 2 SERVER */
+    long long v3s[NFS_V3_NAMES_COUNT]; /* version 3 SERVER */
+    long long v4s[NFS_V4S_NAMES_COUNT]; /* version 4 SERVER */
 } nfsa, nfsb;
 
 /* pointers to the above */
-struct nfs_stat *nfsp = &nfsa;
-struct nfs_stat *nfsq = &nfsb;
+struct nfs_stat* nfsp = &nfsa;
+struct nfs_stat* nfsq = &nfsb;
 
 /* files with the NFS data */
-char *nfs_filename  = "/proc/net/rpc/nfs";
-char *nfsd_filename = "/proc/net/rpc/nfsd";
+char* nfs_filename = "/proc/net/rpc/nfs";
+char* nfsd_filename = "/proc/net/rpc/nfsd";
 
 /* open flie pointers */
-FILE *nfs_fp  = NULL;
-FILE *nfsd_fp = NULL;
+FILE* nfs_fp = NULL;
+FILE* nfsd_fp = NULL;
 
 void nfs_getdata()
 {
@@ -578,7 +582,7 @@ void nfs_getdata()
     int len;
     int lineno;
     char buffer[4096];
-    struct nfs_stat *temp;
+    struct nfs_stat* temp;
     int ret;
 
     /* swap pointers */
@@ -595,8 +599,8 @@ void nfs_getdata()
     */
     if ((nfs_fp = fopen(nfs_filename, "r")) != NULL) {
         for (lineno = 0; fgets(buffer, 4095, nfs_fp) != NULL; lineno++) {
-            buffer[strlen(buffer) -1] = 0; /* ditch end of line  newline */
-            DEBUG printf("get data client line=%d \"%s\"\n",lineno, buffer);
+            buffer[strlen(buffer) - 1] = 0; /* ditch end of line  newline */
+            DEBUG printf("get data client line=%d \"%s\"\n", lineno, buffer);
 
             if (!strncmp("proc2 ", buffer, 6)) {
                 DEBUG printf("client proc2 found\n");
@@ -606,7 +610,7 @@ void nfs_getdata()
                     if (buffer[i] == ' ') {
                         nfsp->v2c[j] = 0;
                         nfsp->v2c[j] = atoll(&buffer[i + 1]);
-                        DEBUG printf("client proc2 j=%d value=%lld\n",j, nfsp->v2c[j]);
+                        DEBUG printf("client proc2 j=%d value=%lld\n", j, nfsp->v2c[j]);
                         j++;
                     }
                 }
@@ -620,7 +624,7 @@ void nfs_getdata()
                     if (buffer[i] == ' ') {
                         nfsp->v3c[j] = 0;
                         nfsp->v3c[j] = atoll(&buffer[i + 1]);
-                        DEBUG printf("client proc3 j=%d value=%lld\n",j, nfsp->v3c[j]);
+                        DEBUG printf("client proc3 j=%d value=%lld\n", j, nfsp->v3c[j]);
                         j++;
                     }
                 }
@@ -634,7 +638,7 @@ void nfs_getdata()
                     if (buffer[i] == ' ') {
                         nfsp->v4c[j] = 0;
                         nfsp->v4c[j] = atoll(&buffer[i + 1]);
-                        DEBUG printf("client proc4 j=%d value=%lld\n",j, nfsp->v4c[j]);
+                        DEBUG printf("client proc4 j=%d value=%lld\n", j, nfsp->v4c[j]);
                         j++;
                     }
                 }
@@ -642,8 +646,8 @@ void nfs_getdata()
         }
         ret = fclose(nfs_fp);
         if (ret != 0)
-            DEBUG printf("fclose(nfs_fp)=%d errno=%d\n", ret,errno);
-        
+            DEBUG printf("fclose(nfs_fp)=%d errno=%d\n", ret, errno);
+
     } else { /* zero all the client counters */
         for (j = 0; j < NFS_V2_NAMES_COUNT; j++) {
             nfsp->v2c[j] = 0;
@@ -675,8 +679,8 @@ void nfs_getdata()
     */
     if ((nfsd_fp = fopen(nfsd_filename, "r")) != NULL) {
         for (lineno = 0; fgets(buffer, 4095, nfsd_fp) != NULL; lineno++) {
-            buffer[strlen(buffer) -1] = 0; /* ditch end of line  newline */
-            DEBUG printf("get data server line=%d \"%s\"\n",lineno, buffer);
+            buffer[strlen(buffer) - 1] = 0; /* ditch end of line  newline */
+            DEBUG printf("get data server line=%d \"%s\"\n", lineno, buffer);
 
             if (!strncmp("proc2 ", buffer, 6)) {
                 DEBUG printf("server proc2 found\n");
@@ -684,10 +688,10 @@ void nfs_getdata()
                 len = strlen(buffer);
                 for (j = 0, i = 8; i < len && j < NFS_V2_NAMES_COUNT; i++) {
                     if (buffer[i] == ' ') {
-                    nfsp->v2s[j] = 0;
-                    nfsp->v2s[j] = atoll(&buffer[i + 1]);
-                    DEBUG printf("server proc2 j=%d value=%lld\n", j, nfsp->v2s[j]);
-                    j++;
+                        nfsp->v2s[j] = 0;
+                        nfsp->v2s[j] = atoll(&buffer[i + 1]);
+                        DEBUG printf("server proc2 j=%d value=%lld\n", j, nfsp->v2s[j]);
+                        j++;
                     }
                 }
             }
@@ -699,10 +703,10 @@ void nfs_getdata()
                 len = strlen(buffer);
                 for (j = 0, i = 8; i < len && j < NFS_V2_NAMES_COUNT; i++) {
                     if (buffer[i] == ' ') {
-                    nfsp->v3s[j] = 0;
-                    nfsp->v3s[j] = atoll(&buffer[i + 1]);
-                    DEBUG printf("server proc3 j=%d value=%lld\n", j, nfsp->v3s[j]);
-                    j++;
+                        nfsp->v3s[j] = 0;
+                        nfsp->v3s[j] = atoll(&buffer[i + 1]);
+                        DEBUG printf("server proc3 j=%d value=%lld\n", j, nfsp->v3s[j]);
+                        j++;
                     }
                 }
             }
@@ -715,17 +719,17 @@ void nfs_getdata()
                 len = strlen(buffer);
                 for (j = 0, i = 11; i < len && j < NFS_V4S_NAMES_COUNT; i++) {
                     if (buffer[i] == ' ') {
-                    nfsp->v4s[j] = 0;
-                    nfsp->v4s[j] = atoll(&buffer[i + 1]);
-                        DEBUG printf("server proc4 j=%d value=%lld\n",j, nfsp->v4s[j]);
-                    j++;
+                        nfsp->v4s[j] = 0;
+                        nfsp->v4s[j] = atoll(&buffer[i + 1]);
+                        DEBUG printf("server proc4 j=%d value=%lld\n", j, nfsp->v4s[j]);
+                        j++;
                     }
                 }
             }
         }
         ret = fclose(nfsd_fp);
         if (ret != 0)
-            DEBUG printf("fclose(nfsd_fp)=%d errno=%d\n", ret,errno);
+            DEBUG printf("fclose(nfsd_fp)=%d errno=%d\n", ret, errno);
     } else { /* zero all the server counters */
         for (j = 0; j < NFS_V2_NAMES_COUNT; j++) {
             nfsp->v2s[j] = 0;
@@ -772,7 +776,6 @@ void nfs(double elapsed)
             pdouble(nfs_v2_names[i], ((double)(nfsp->v2s[i] - nfsq->v2s[i])) / elapsed);
         }
         psectionend();
-            
     }
     for (total = 0, i = 1; i < NFS_V3_NAMES_COUNT; i++)
         total += nfsp->v3c[i];
@@ -806,7 +809,7 @@ void nfs(double elapsed)
     if (total > 100) {
         psection("NFS4server");
         for (i = 0; i < NFS_V4S_NAMES_COUNT; i++) {
-            pdouble(nfs_v4s_names[i], ((double)(nfsp->v4s[i] - nfsq->v4s[i])) / elapsed); 
+            pdouble(nfs_v4s_names[i], ((double)(nfsp->v4s[i] - nfsq->v4s[i])) / elapsed);
         }
         psectionend();
     }
@@ -1451,7 +1454,7 @@ void proc_diskstats(double elapsed, int print)
         if (pop != NULL) {
             /* throw away the headerline */
             tmpstr[0] = 0;
-            if (fgets(tmpstr, 127, pop) != NULL){
+            if (fgets(tmpstr, 127, pop) != NULL) {
                 for (disks = 0;; disks++) {
                     tmpstr[0] = 0;
                     if (fgets(tmpstr, 127, pop) == NULL)
@@ -2337,9 +2340,11 @@ void identity(char* command, char* version)
 }
 
 #ifndef NOREMOTE
-void config(int debugging, long long maxloops, long seconds, int process_mode, int remote_mode, char* host, long port, char* secret) {
+void config(int debugging, long long maxloops, long seconds, int process_mode, int remote_mode, char* host, long port, char* secret)
+{
 #else
-void config(int debugging, long long maxloops, long seconds, int process_mode) {
+void config(int debugging, long long maxloops, long seconds, int process_mode)
+{
 #endif
     psection("config");
     pstring("debugging", debugging ? "yes" : "no");
@@ -2372,7 +2377,8 @@ void config(int debugging, long long maxloops, long seconds, int process_mode) {
  *              */
 char pid_filename[] = "/tmp/precimon.pid";
 
-void do_lock(int fd) {
+void do_lock(int fd)
+{
     char buffer[32];
 
     if (flock(fd, LOCK_EX | LOCK_NB) < 0) {
@@ -2756,6 +2762,15 @@ int getprocs(int max_records)
     return count;
 }
 
+int getproc(pid_t monitor_process)
+{
+    if (monitor_process != -1) {
+        return proc_procsinfo(monitor_process, 0);
+    }
+
+    return 0;
+}
+
 /* Workout how many prcesses we hve and make sure we have enough structures */
 void processes_space_manage()
 {
@@ -2794,12 +2809,83 @@ void processes_init()
 #define TIMEDELTA(member) (CURRENT(member) - PREVIOUS(member))
 #define COUNTDELTA(member) ((PREVIOUS(member) > CURRENT(member)) ? 0 : (CURRENT(member) - PREVIOUS(member)))
 
+void process_print(int entry, int max_sorted, int pagesize, double elapsed)
+{
+    int pindex = topper[entry].pindex;
+    int qindex = topper[entry].qindex;
+
+    parrayelement();
+
+    /* Note to self: the directory owners /proc/PID is the process owner = worth adding */
+    plong("pid", CURRENT(pi_pid));
+    /* Full command line can be found /proc/PID/cmdline with zeros in it! */
+    pstring("cmd", CURRENT(pi_comm));
+    plong("ppid", CURRENT(pi_ppid));
+    plong("pgrp", CURRENT(pi_pgrp));
+    plong("priority", CURRENT(pi_priority));
+    plong("nice", CURRENT(pi_nice));
+    plong("session", CURRENT(pi_session));
+    plong("tty_nr", CURRENT(pi_tty_nr));
+    phex("flags", CURRENT(pi_flags));
+    pstring("state", get_state(CURRENT(pi_state)));
+#ifndef PRE_KERNEL_2_6_18
+    plong("threads", CURRENT(pi_num_threads));
+#endif
+    pdouble("cpu_percent", topper[entry].time / elapsed);
+    pdouble("cpu_usr", TIMEDELTA(pi_utime) / elapsed);
+    pdouble("cpu_sys", TIMEDELTA(pi_stime) / elapsed);
+    pdouble("cpu_usr_total_secs", CURRENT(pi_utime) / (double)sysconf(_SC_CLK_TCK));
+    pdouble("cpu_sys_total_secs", CURRENT(pi_stime) / (double)sysconf(_SC_CLK_TCK));
+    plong("statm_size_kb", CURRENT(statm_size) * pagesize / 1024);
+    plong("statm_resident_kb", CURRENT(statm_resident) * pagesize / 1024);
+    plong("statm_restext_kb", CURRENT(statm_trs) * pagesize / 1024);
+    plong("statm_resdata_kb", CURRENT(statm_drs) * pagesize / 1024);
+    plong("statm_share_kb", CURRENT(statm_share) * pagesize / 1024);
+    pdouble("minorfault", COUNTDELTA(pi_minflt) / elapsed);
+    pdouble("majorfault", COUNTDELTA(pi_majflt) / elapsed);
+
+    plong("it_real_value", CURRENT(pi_it_real_value));
+    pdouble("starttime_secs", (double)(CURRENT(pi_start_time)) / (double)sysconf(_SC_CLK_TCK));
+    plong("virtual_size_kb", (long long)(CURRENT(pi_vsize) / 1024));
+    plong("rss_pages", CURRENT(pi_rss));
+    plong("rss_limit", CURRENT(pi_rsslimit));
+#ifdef PROCESS_DEBUGING_ADDRESSES_SIGNALS
+    /* NOT INCLUDED AS THEY ARE FOR DEBUGGING AND NOT PERFORMANCE TUNING */
+    phex("start_code", CURRENT(pi_start_code));
+    phex("end_code", CURRENT(pi_end_code));
+    phex("start_stack", CURRENT(pi_start_stack));
+    phex("esp_stack_pointer", CURRENT(pi_esp));
+    phex("eip_instruction_pointer", CURRENT(pi_eip));
+    phex("signal_pending", CURRENT(pi_signal_pending));
+    phex("signal_blocked", CURRENT(pi_signal_blocked));
+    phex("signal_ignore", CURRENT(pi_signal_ignore));
+    phex("signal_catch", CURRENT(pi_signal_catch));
+    phex("signal_exit", CURRENT(pi_signal_exit));
+    phex("wchan", CURRENT(pi_wchan));
+    /* NOT INCLUDED AS THEY ARE FOR DEBUGGING AND NOT PERFORMANCE TUNING */
+#endif
+
+    plong("swap_pages", CURRENT(pi_swap_pages));
+    plong("child_swap_pages", CURRENT(pi_child_swap_pages));
+    plong("last_cpu", CURRENT(pi_last_cpu));
+#ifndef PRE_KERNEL_2_6_18
+    plong("realtime_priority", CURRENT(pi_realtime_priority));
+    plong("sched_policy", CURRENT(pi_sched_policy));
+    pdouble("delayacct_blkio_secs", (double)CURRENT(pi_delayacct_blkio_ticks) / (double)sysconf(_SC_CLK_TCK));
+#endif
+    plong("uid", CURRENT(uid));
+    if (strlen(CURRENT(username)) > 0)
+        pstring("username", CURRENT(username));
+
+    parrayelementend(entry == max_sorted - 1);
+}
+
 /* processes() does the main work
  * 1 get the latest process stats
  * 2 build the topper structures of matching previous & current processes matched by pid
  * 3 save data for processes using over the threshold CPU percentage
  */
-void processes(double elapsed)
+void processes(pid_t monitor, double elapsed)
 {
     int pindex = 0;
     int qindex = 0;
@@ -2816,8 +2902,12 @@ void processes(double elapsed)
     /* recaculate the number of processes */
     processes_space_manage();
 
-    /* get fresh top processes data */
-    p->processes = getprocs(p->proc_records);
+    if (monitor == -1) {
+        /* get fresh top processes data */
+        p->processes = getprocs(p->proc_records);
+    } else {
+        p->processes = getproc(monitor);
+    }
 
     /* Sort the processes by CPU utilisation */
     /* 1st find matching pids in both lists */
@@ -2826,7 +2916,14 @@ void processes(double elapsed)
         for (qindex = 0; qindex < q->processes; qindex++) {
             if (p->procs[pindex].pi_pid == q->procs[qindex].pi_pid) { /* found a match */
                 cputime = TIMEDELTA(pi_utime) + TIMEDELTA(pi_stime);
-                if ((cputime / elapsed) > ignore_threshold) {
+                if (monitor != -1) {
+                    /* save only interesting processes (i.e. not near zero cputime) */
+                    topper[max_sorted].pindex = pindex;
+                    topper[max_sorted].qindex = qindex;
+                    topper[max_sorted].time = cputime;
+                    max_sorted++;
+                }
+                else if ((cputime / elapsed) > ignore_threshold) {
                     /* save only interesting processes (i.e. not near zero cputime) */
                     topper[max_sorted].pindex = pindex;
                     topper[max_sorted].qindex = qindex;
@@ -2837,7 +2934,12 @@ void processes(double elapsed)
             }
         }
     }
-    if (max_sorted > 0) { /* don't sort an empty list */
+
+    if (monitor != -1) {
+        max_sorted = 1;
+    }
+
+    if (max_sorted > 1) { /* don't sort an empty list */
         qsort((void*)&topper[0], max_sorted, sizeof(struct topper), &cpu_compare);
     }
 
@@ -2846,73 +2948,7 @@ void processes(double elapsed)
      * */
     parray("processes");
     for (entry = 0; entry < max_sorted; entry++) {
-        pindex = topper[entry].pindex;
-        qindex = topper[entry].qindex;
-
-        parrayelement();
-
-        /* Note to self: the directory owners /proc/PID is the process owner = worth adding */
-        plong("pid", CURRENT(pi_pid));
-        /* Full command line can be found /proc/PID/cmdline with zeros in it! */
-        pstring("cmd", CURRENT(pi_comm));
-        plong("ppid", CURRENT(pi_ppid));
-        plong("pgrp", CURRENT(pi_pgrp));
-        plong("priority", CURRENT(pi_priority));
-        plong("nice", CURRENT(pi_nice));
-        plong("session", CURRENT(pi_session));
-        plong("tty_nr", CURRENT(pi_tty_nr));
-        phex("flags", CURRENT(pi_flags));
-        pstring("state", get_state(CURRENT(pi_state)));
-#ifndef PRE_KERNEL_2_6_18
-        plong("threads", CURRENT(pi_num_threads));
-#endif
-        pdouble("cpu_percent", topper[entry].time / elapsed);
-        pdouble("cpu_usr", TIMEDELTA(pi_utime) / elapsed);
-        pdouble("cpu_sys", TIMEDELTA(pi_stime) / elapsed);
-        pdouble("cpu_usr_total_secs", CURRENT(pi_utime) / (double)sysconf(_SC_CLK_TCK));
-        pdouble("cpu_sys_total_secs", CURRENT(pi_stime) / (double)sysconf(_SC_CLK_TCK));
-        plong("statm_size_kb", CURRENT(statm_size) * pagesize / 1024);
-        plong("statm_resident_kb", CURRENT(statm_resident) * pagesize / 1024);
-        plong("statm_restext_kb", CURRENT(statm_trs) * pagesize / 1024);
-        plong("statm_resdata_kb", CURRENT(statm_drs) * pagesize / 1024);
-        plong("statm_share_kb", CURRENT(statm_share) * pagesize / 1024);
-        pdouble("minorfault", COUNTDELTA(pi_minflt) / elapsed);
-        pdouble("majorfault", COUNTDELTA(pi_majflt) / elapsed);
-
-        plong("it_real_value", CURRENT(pi_it_real_value));
-        pdouble("starttime_secs", (double)(CURRENT(pi_start_time)) / (double)sysconf(_SC_CLK_TCK));
-        plong("virtual_size_kb", (long long)(CURRENT(pi_vsize) / 1024));
-        plong("rss_pages", CURRENT(pi_rss));
-        plong("rss_limit", CURRENT(pi_rsslimit));
-#ifdef PROCESS_DEBUGING_ADDRESSES_SIGNALS
-        /* NOT INCLUDED AS THEY ARE FOR DEBUGGING AND NOT PERFORMANCE TUNING */
-        phex("start_code", CURRENT(pi_start_code));
-        phex("end_code", CURRENT(pi_end_code));
-        phex("start_stack", CURRENT(pi_start_stack));
-        phex("esp_stack_pointer", CURRENT(pi_esp));
-        phex("eip_instruction_pointer", CURRENT(pi_eip));
-        phex("signal_pending", CURRENT(pi_signal_pending));
-        phex("signal_blocked", CURRENT(pi_signal_blocked));
-        phex("signal_ignore", CURRENT(pi_signal_ignore));
-        phex("signal_catch", CURRENT(pi_signal_catch));
-        phex("signal_exit", CURRENT(pi_signal_exit));
-        phex("wchan", CURRENT(pi_wchan));
-        /* NOT INCLUDED AS THEY ARE FOR DEBUGGING AND NOT PERFORMANCE TUNING */
-#endif
-
-        plong("swap_pages", CURRENT(pi_swap_pages));
-        plong("child_swap_pages", CURRENT(pi_child_swap_pages));
-        plong("last_cpu", CURRENT(pi_last_cpu));
-#ifndef PRE_KERNEL_2_6_18
-        plong("realtime_priority", CURRENT(pi_realtime_priority));
-        plong("sched_policy", CURRENT(pi_sched_policy));
-        pdouble("delayacct_blkio_secs", (double)CURRENT(pi_delayacct_blkio_ticks) / (double)sysconf(_SC_CLK_TCK));
-#endif
-        plong("uid", CURRENT(uid));
-        if (strlen(CURRENT(username)) > 0)
-            pstring("username", CURRENT(username));
-
-        parrayelementend(entry == max_sorted - 1);
+        process_print(entry, max_sorted, pagesize, elapsed);
     }
     parrayend();
 }
@@ -2945,7 +2981,7 @@ void hint(char* program, char* version)
     printf("\t-p port    : port number on collector host\n");
     printf("\t-X secret  : Set the remote collector secret or use shell PRECIMON_SECRET\n");
 #endif /* NOREMOTE */
-    printf("\t-P         : Add process stats (take CPU cycles and large stats volume)\n");
+    printf("\t-P [pid]   : Add process stats for interesting process or a specific process identified by pid(take CPU cycles and large stats volume)\n");
     printf("\t-I percent : Set ignore process percent threshold (default 0.01%%)\n");
     printf("\t-C         : Output precimon configuration to the JSON file\n");
     printf("\t-T         : Output snapshot timers e.g. sleep time, execution time\n");
@@ -3021,6 +3057,7 @@ int main(int argc, char** argv)
     char datastring[256];
 #endif
     pid_t childpid;
+    pid_t monitor_process = -1;
     int proc_mode = 0;
     int timers_mode = 0;
     int cpu_mode = 0;
@@ -3050,7 +3087,7 @@ int main(int argc, char** argv)
 
     uid = getuid();
 
-    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:di:I:Pp:X:xCTUMDNLG"))) {
+    while (-1 != (ch = getopt(argc, argv, "?hfm:s:c:di:I:P:p:X:xCTUMDNLG"))) {
         switch (ch) {
         case '?':
         case 'h':
@@ -3090,6 +3127,9 @@ int main(int argc, char** argv)
 #endif /* NOREMOTE */
         case 'P':
             proc_mode = 1;
+            if (optarg != NULL) {
+                monitor_process = atoi(optarg);
+            }
             break;
         case 'I':
             ignore_threshold = atof(optarg);
@@ -3241,7 +3281,7 @@ int main(int argc, char** argv)
     for (i = 0; i < argc; i++) {
         commlen = commlen + strlen(argv[i]) + 1; /* +1 for spaces */
     }
-    command = (char*) malloc(commlen);
+    command = (char*)malloc(commlen);
     command[0] = 0;
     for (i = 0; i < argc; i++) {
         strcat(command, argv[i]);
@@ -3271,8 +3311,9 @@ int main(int argc, char** argv)
         gpfs_init();
     }
 #endif /* NOGPFS */
-    if (proc_mode)
+    if (proc_mode) {
         processes_init();
+    }
 
     /* pre-amble */
     pstart();
@@ -3360,11 +3401,13 @@ int main(int argc, char** argv)
             sys_device_system_cpu(elapsed, PRINT_TRUE);
         }
 #ifndef NOGPFS
-        if (gpfs_mode)
+        if (gpfs_mode) {
             gpfs_data(elapsed);
+        }
 #endif /* NOGPFS */
-        if (proc_mode)
-            processes(elapsed);
+        if (proc_mode) {
+            processes(monitor_process, elapsed);
+        }
 
         if (interrupted) {
             fprintf(stderr, "signal=%d received at loop=%lld, breaking and exiting gracefully...\n", interrupted, loop);

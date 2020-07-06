@@ -12,7 +12,7 @@ The tool samples `/proc` every N seconds then prints them to stdout or selected 
 - `-c` count     : number of snapshots (default forever)
 - `-m` directory : Program will cd to the directory before output
 - `-f`           : Output to file (not stdout). Data file:  `hostname_<year><month><day>_<hour><minutes>.json`. Error file `hostname_<year><month><day>_<hour><minutes>.err`
-- `-P`           : Add process stats (take CPU cycles and large stats volume)
+- `-P [pid]`     : Add process stats for interesting process or a specific process identified by pid
 - `-I percent`   : Set ignore process percent threshold (default 0.01%)
 - `-C`           : Output precimon configuration to the JSON file
 - `-T`           : Output snapshot timers e.g. sleep time, execution time
@@ -90,12 +90,15 @@ all buffered data to the output file, completes the JSON format then exits.
 - Better JSON structure
 - Single process instance using pid file locks `/tmp/precimon.pid`
 
+#### Single Process Monitoring
+
+- Monitor a specific process using the option `-P id` to output metrics of process whose pid is `id`
+
 ### vNext
 
 Hopefully, we want to include these features in vNext:
 
 - Metrics Alerts e.g. when total CPU percentage > 60%, alert using email
-- Single process monitoring e.g. `-P 1500` to output metrics of process whose pid is 1500
 - Database Injection Support for collector
 
 ## License
